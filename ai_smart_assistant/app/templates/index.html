@@ -1,66 +1,1502 @@
 {% extends 'base.html' %}
 
 {% block content %}
-<h1>🤖 AI Smart Assistant</h1>
+<!-- Left Pane: Project Explorer -->
+<aside class="explorer-pane">
+    <section class="panel" style="height: 100%;">
+        <header class="panel-header">
+            <h2><span>📁</span> Explorer</h2>
+            <div style="display: flex; gap: 5px;">
+                <label for="file-input" class="btn-icon" title="Upload File (Ctrl+O)">📂</label>
+                <button id="github-sync-btn" class="btn-icon" title="Clone Repository">🌐</button>
+                <button id="new-file-btn" class="btn-icon" title="New File (Ctrl+N)">➕</button>
+            </div>
+        </header>
+        <div class="explorer-content" id="explorer-tree">
+            <div class="tree-item active">
+                <span class="tree-icon">📄</span>
+                <span class="tree-file">{{ code_context.name if code_context else 'untitled.py' }}</span>
+            </div>
+        </div>
 
-<div class="chat-box" id="chat-box">
-    {% for msg in history %}
-    <div class="message {{ 'user-message' if msg.role == 'user' else 'ai-message' }}">
-        {{ msg.content }}
-    </div>
-    {% endfor %}
+        <!-- Code Templates Section -->
+        <div class="panel-header" style="border-top: 1px solid var(--glass-border); padding: 0.75rem 1rem;">
+            <h2 style="font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em;">Templates</h2>
+        </div>
+        <div style="padding: 0.5rem 1rem; display: flex; flex-direction: column; gap: 0.35rem;">
+            <!-- Python Templates -->
+            <button class="template-btn" data-template="python-basic">🐍 Python Script</button>
+            <button class="template-btn" data-template="python-class">🏗️ Python Class</button>
+            
+            <!-- JavaScript Templates -->
+            <button class="template-btn" data-template="js-fetch">📡 JS Fetch API</button>
+            <button class="template-btn" data-template="js-async">⏳ JS Async/Await</button>
+            
+            <!-- Web Templates -->
+            <button class="template-btn" data-template="html-basic">🌐 HTML Page</button>
+            <button class="template-btn" data-template="css-grid">🎨 CSS Grid</button>
+            
+            <!-- Backend Templates -->
+            <button class="template-btn" data-template="flask-api">🔧 Flask API</button>
+            <button class="template-btn" data-template="express-app">⚡ Express App</button>
+            
+            <!-- Java Templates -->
+            <button class="template-btn" data-template="java-main">☕ Java Main</button>
+            <button class="template-btn" data-template="java-class">☕ Java Class</button>
+            
+            <!-- Other Languages -->
+            <button class="template-btn" data-template="go-main">🐹 Go Program</button>
+            <button class="template-btn" data-template="rust-main">🦀 Rust Program</button>
+            <button class="template-btn" data-template="cpp-main">➕ C++ Program</button>
+            <button class="template-btn" data-template="sql-query">🗄️ SQL Query</button>
+        </div>
 
-    {% if not history %}
-    <div class="message ai-message">
-        Hello! I am your AI assistant. How can I help you today?
-    </div>
-    {% endif %}
+        <div class="panel-header" style="border-top: 1px solid var(--glass-border); padding: 0.75rem 1rem;">
+            <h2 style="font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em;">Quick Actions</h2>
+        </div>
+        <div style="padding: 0.5rem 1rem 1rem; display: flex; flex-direction: column; gap: 0.5rem;">
+            <label for="vision-input" class="action-btn" style="justify-content: center;">📸 Image to Code</label>
+            <button id="download-btn" class="action-btn" style="justify-content: center;">💾 Download Code</button>
+            <button id="format-btn" class="action-btn" style="justify-content: center;">✨ Format Code</button>
+            <button id="metrics-btn" class="action-btn" style="justify-content: center;">📊 Code Metrics</button>
+            <button id="snippets-btn" class="action-btn" style="justify-content: center;">📚 Snippets</button>
+            <input type="file" id="file-input" class="hidden" accept=".py,.js,.html,.css,.json,.txt,.md,.ts,.jsx,.tsx,.vue,.go,.rs,.rb,.php,.sql,.yaml,.yml,.xml,.sh,.bat,.zip">
+            <input type="file" id="vision-input" class="hidden" accept="image/*">
+        </div>
+    </section>
+</aside>
 
-    {% if error %}
-    <div class="message ai-message" style="border-color: #ef4444; color: #ef4444;">
-        ⚠️ {{ error }}
+<!-- Center Pane: Editor & Terminal -->
+<main class="editor-pane-group">
+    <div class="panel editor-panel">
+        <!-- Editor Tabs -->
+        <div class="editor-tabs" id="editor-tabs">
+            <div class="editor-tab active" data-file="untitled.py">
+                <span class="tab-icon">🐍</span>
+                <span class="tab-name">{{ code_context.name if code_context else 'untitled.py' }}</span>
+                <span class="tab-close" title="Close">×</span>
+            </div>
+        </div>
+        <div class="editor-toolbar">
+            <div style="display: flex; align-items: center; gap: 0.75rem;">
+                <div class="filename">
+                    <span class="dot"></span>
+                    <span id="current-filename">{{ code_context.name if code_context else 'untitled.py' }}</span>
+                </div>
+                <select id="language-select" class="action-btn" style="padding: 0.35rem 0.5rem; min-width: 120px;">
+                    <!-- Interpreted Languages -->
+                    <optgroup label="📜 Interpreted Languages">
+                        <option value="python">🐍 Python</option>
+                        <option value="javascript">📜 JavaScript</option>
+                        <option value="typescript">📘 TypeScript</option>
+                        <option value="ruby">💎 Ruby</option>
+                        <option value="php">🐘 PHP</option>
+                        <option value="go">🐹 Go</option>
+                        <option value="bash">🖥️ Bash</option>
+                        <option value="powershell">⚡ PowerShell</option>
+                        <option value="perl">🐪 Perl</option>
+                        <option value="lua">🌙 Lua</option>
+                    </optgroup>
+                    
+                    <!-- Compiled Languages -->
+                    <optgroup label="⚙️ Compiled Languages">
+                        <option value="java">☕ Java</option>
+                        <option value="cpp">➕ C++</option>
+                        <option value="c">🔤 C</option>
+                        <option value="csharp">🎯 C#</option>
+                        <option value="rust">🦀 Rust</option>
+                    </optgroup>
+                    
+                    <!-- Markup & Web -->
+                    <optgroup label="📄 Markup & Web">
+                        <option value="html">📄 HTML</option>
+                        <option value="css">🎨 CSS</option>
+                        <option value="json">📦 JSON</option>
+                        <option value="xml">📋 XML</option>
+                        <option value="markdown">📝 Markdown</option>
+                    </optgroup>
+                    
+                    <!-- Database & Other -->
+                    <optgroup label="🗄️ Database & Other">
+                        <option value="sql">🗄️ SQL</option>
+                    </optgroup>
+                </select>
+            </div>
+            <div style="flex: 1;"></div>
+            <div style="display: flex; gap: 0.5rem; align-items: center;">
+                <button class="action-btn" id="preview-btn" title="Live Preview (HTML/CSS)">👁️ Preview</button>
+                <button class="action-btn" id="save-btn" title="Save to Workspace (Ctrl+S)">💾 Save</button>
+                <button class="action-btn" id="run-btn" title="Run Code (Ctrl+Enter)" style="background: var(--success); color: white; border-color: var(--success);">▶ Run</button>
+                <button class="action-btn" id="agent-mode-btn" title="AI Agent Mode">🤖 Agent</button>
+                <button class="action-btn" id="cmd-palette-btn" title="Command Palette (Ctrl+Shift+P)">⌘</button>
+                <button class="action-btn" id="settings-btn" title="Settings">⚙️</button>
+            </div>
+        </div>
+        <div id="monaco-editor-container"></div>
     </div>
-    {% endif %}
+
+    <div class="panel terminal-panel" id="terminal-panel">
+        <div class="panel-header">
+            <h2 style="font-size: 0.85rem;"><span>💻</span> Terminal</h2>
+            <div style="display: flex; gap: 8px; align-items: center;">
+                <button id="fix-error-btn" class="action-btn hidden" style="background: var(--error); color: white; border-color: var(--error); font-size: 0.7rem;">🛠 Fix with AI</button>
+                <button class="btn-icon" id="clear-terminal-btn" title="Clear Terminal">🧹</button>
+            </div>
+        </div>
+        <div class="terminal-output" id="terminal">
+            <div class="term-line term-info">✨ NexusAI Ready - Your intelligent coding assistant</div>
+            <div class="term-line">Press <span class="kbd">Ctrl</span>+<span class="kbd">Enter</span> to run code</div>
+        </div>
+    </div>
+</main>
+
+<!-- Right Pane: Chat -->
+<aside class="chat-pane" id="chat-pane">
+    <section class="panel chat-panel">
+        <header class="panel-header">
+            <h2><span>⚡</span> NexusAI</h2>
+            <div style="display: flex; gap: 5px;">
+                <button id="export-chat-btn" class="btn-icon" title="Export Chat">📋</button>
+                <button id="clear-chat" class="btn-icon" title="Clear Chat">🗑️</button>
+            </div>
+        </header>
+
+        <div class="chat-box" id="chat-box">
+            {% for msg in history %}
+            <div class="message {{ 'user-message' if msg.role == 'user' else 'ai-message' }}" data-raw-content="{{ msg.content }}">
+                <div class="content-wrapper"></div>
+            </div>
+            {% endfor %}
+            {% if not history %}
+            <div class="message ai-message">
+                <div class="content-wrapper">
+                    <strong>👋 Welcome to NexusAI!</strong><br><br>
+                    I'm your intelligent coding assistant. I can help you:
+                    <ul style="margin-top: 0.5rem;">
+                        <li>Write and debug code</li>
+                        <li>Explain complex concepts</li>
+                        <li>Generate unit tests</li>
+                        <li>Review and optimize code</li>
+                        <li>Convert designs to code</li>
+                    </ul>
+                    <br>
+                    <strong>Quick tips:</strong>
+                    <ul>
+                        <li><span class="kbd">Ctrl</span>+<span class="kbd">Enter</span> - Run code</li>
+                        <li><span class="kbd">Ctrl</span>+<span class="kbd">S</span> - Save file</li>
+                        <li><span class="kbd">Enter</span> - Send message</li>
+                    </ul>
+                </div>
+            </div>
+            {% endif %}
+        </div>
+
+        <div class="action-toolbar">
+            <button class="action-btn" data-action="explain" title="Explain the current code">💡 Explain</button>
+            <button class="action-btn" data-action="debug" title="Find bugs in the code">🐛 Debug</button>
+            <button class="action-btn" data-action="tests" title="Generate unit tests">🧪 Tests</button>
+            <button class="action-btn" data-action="optimize" title="Optimize the code">⚡ Optimize</button>
+            <button class="action-btn" data-action="document" title="Add documentation">📝 Document</button>
+        </div>
+
+        <form id="chat-form" class="input-area">
+            <textarea name="user_input" id="user-input" placeholder="Ask me anything... (Enter to send, Shift+Enter for new line)" rows="1"></textarea>
+            <button type="submit" class="btn-primary" id="send-btn">➤</button>
+        </form>
+    </section>
+</aside>
+
+<!-- Command Palette Modal (VS Code-like) -->
+<div id="command-palette-overlay" class="modal-overlay hidden">
+    <div class="command-palette">
+        <div class="command-input-wrapper">
+            <span class="command-icon">⌘</span>
+            <input type="text" id="command-search" placeholder="Type a command..." autocomplete="off">
+            <span class="command-hint">ESC to close</span>
+        </div>
+        <div class="command-list" id="command-list">
+            <div class="command-group">
+                <div class="command-group-title">File Operations</div>
+                <div class="command-item" data-command="newFile"><span class="cmd-icon">📄</span> New File <span class="cmd-shortcut">Ctrl+N</span></div>
+                <div class="command-item" data-command="openFile"><span class="cmd-icon">📂</span> Open File <span class="cmd-shortcut">Ctrl+O</span></div>
+                <div class="command-item" data-command="saveFile"><span class="cmd-icon">💾</span> Save File <span class="cmd-shortcut">Ctrl+S</span></div>
+                <div class="command-item" data-command="downloadCode"><span class="cmd-icon">⬇️</span> Download Code</div>
+            </div>
+            <div class="command-group">
+                <div class="command-group-title">Code</div>
+                <div class="command-item" data-command="runCode"><span class="cmd-icon">▶️</span> Run Code <span class="cmd-shortcut">Ctrl+Enter</span></div>
+                <div class="command-item" data-command="formatCode"><span class="cmd-icon">✨</span> Format Code <span class="cmd-shortcut">Shift+Alt+F</span></div>
+                <div class="command-item" data-command="toggleMinimap"><span class="cmd-icon">🗺️</span> Toggle Minimap</div>
+                <div class="command-item" data-command="toggleWordWrap"><span class="cmd-icon">↩️</span> Toggle Word Wrap</div>
+            </div>
+            <div class="command-group">
+                <div class="command-group-title">AI Assistant</div>
+                <div class="command-item" data-command="askAI"><span class="cmd-icon">🤖</span> Ask AI <span class="cmd-shortcut">Ctrl+/</span></div>
+                <div class="command-item" data-command="explainCode"><span class="cmd-icon">💡</span> Explain Code</div>
+                <div class="command-item" data-command="debugCode"><span class="cmd-icon">🐛</span> Debug Code</div>
+                <div class="command-item" data-command="generateTests"><span class="cmd-icon">🧪</span> Generate Tests</div>
+                <div class="command-item" data-command="optimizeCode"><span class="cmd-icon">⚡</span> Optimize Code</div>
+            </div>
+            <div class="command-group">
+                <div class="command-group-title">View</div>
+                <div class="command-item" data-command="toggleTheme"><span class="cmd-icon">🌓</span> Toggle Theme</div>
+                <div class="command-item" data-command="openSettings"><span class="cmd-icon">⚙️</span> Open Settings</div>
+                <div class="command-item" data-command="showShortcuts"><span class="cmd-icon">⌨️</span> Keyboard Shortcuts</div>
+                <div class="command-item" data-command="showMetrics"><span class="cmd-icon">📊</span> Code Metrics</div>
+            </div>
+            <div class="command-group">
+                <div class="command-group-title">Snippets</div>
+                <div class="command-item" data-command="saveSnippet"><span class="cmd-icon">📌</span> Save as Snippet</div>
+                <div class="command-item" data-command="browseSnippets"><span class="cmd-icon">📚</span> Browse Snippets</div>
+            </div>
+        </div>
+    </div>
 </div>
 
-<form method="POST" class="input-area" id="chat-form">
-    <textarea name="user_input" id="user-input" placeholder="Type your message..." rows="1" required></textarea>
-    <button type="submit" id="send-btn">Send</button>
-</form>
-
-<div id="loading-state"
-    style="display: none; margin-top: 15px; color: var(--text-muted); font-size: 0.9rem; text-align: center; animation: fadeIn 0.3s ease-out;">
-    <span class="spinner"></span> AI is thinking...
+<!-- Keyboard Shortcuts Modal -->
+<div id="shortcuts-overlay" class="modal-overlay hidden">
+    <div class="shortcuts-modal">
+        <header class="modal-header">
+            <h3>⌨️ Keyboard Shortcuts</h3>
+            <button class="btn-icon" id="close-shortcuts-btn">✕</button>
+        </header>
+        <div class="shortcuts-body">
+            <div class="shortcuts-section">
+                <h4>General</h4>
+                <div class="shortcut-item"><span class="keys"><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>P</kbd></span><span>Command Palette</span></div>
+                <div class="shortcut-item"><span class="keys"><kbd>Ctrl</kbd>+<kbd>/</kbd></span><span>Focus Chat</span></div>
+                <div class="shortcut-item"><span class="keys"><kbd>Escape</kbd></span><span>Close Modals</span></div>
+            </div>
+            <div class="shortcuts-section">
+                <h4>File</h4>
+                <div class="shortcut-item"><span class="keys"><kbd>Ctrl</kbd>+<kbd>N</kbd></span><span>New File</span></div>
+                <div class="shortcut-item"><span class="keys"><kbd>Ctrl</kbd>+<kbd>O</kbd></span><span>Open File</span></div>
+                <div class="shortcut-item"><span class="keys"><kbd>Ctrl</kbd>+<kbd>S</kbd></span><span>Save/Download</span></div>
+            </div>
+            <div class="shortcuts-section">
+                <h4>Code</h4>
+                <div class="shortcut-item"><span class="keys"><kbd>Ctrl</kbd>+<kbd>Enter</kbd></span><span>Run Code</span></div>
+                <div class="shortcut-item"><span class="keys"><kbd>Shift</kbd>+<kbd>Alt</kbd>+<kbd>F</kbd></span><span>Format Code</span></div>
+                <div class="shortcut-item"><span class="keys"><kbd>Ctrl</kbd>+<kbd>D</kbd></span><span>Duplicate Line</span></div>
+            </div>
+            <div class="shortcuts-section">
+                <h4>Editor</h4>
+                <div class="shortcut-item"><span class="keys"><kbd>Ctrl</kbd>+<kbd>+</kbd></span><span>Increase Font</span></div>
+                <div class="shortcut-item"><span class="keys"><kbd>Ctrl</kbd>+<kbd>-</kbd></span><span>Decrease Font</span></div>
+                <div class="shortcut-item"><span class="keys"><kbd>Ctrl</kbd>+<kbd>F</kbd></span><span>Find</span></div>
+                <div class="shortcut-item"><span class="keys"><kbd>Ctrl</kbd>+<kbd>H</kbd></span><span>Replace</span></div>
+            </div>
+        </div>
+    </div>
 </div>
+
+<!-- Code Metrics Modal -->
+<div id="metrics-overlay" class="modal-overlay hidden">
+    <div class="metrics-modal">
+        <header class="modal-header">
+            <h3>📊 Code Metrics</h3>
+            <button class="btn-icon" id="close-metrics-btn">✕</button>
+        </header>
+        <div class="metrics-body">
+            <div class="metrics-grid">
+                <div class="metric-card">
+                    <div class="metric-value" id="metric-lines">0</div>
+                    <div class="metric-label">Lines of Code</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-value" id="metric-chars">0</div>
+                    <div class="metric-label">Characters</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-value" id="metric-words">0</div>
+                    <div class="metric-label">Words</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-value" id="metric-functions">0</div>
+                    <div class="metric-label">Functions</div>
+                </div>
+            </div>
+            <div class="metrics-details">
+                <h4>Analysis</h4>
+                <div class="analysis-item">
+                    <span class="analysis-label">Language</span>
+                    <span class="analysis-value" id="metric-language">Python</span>
+                </div>
+                <div class="analysis-item">
+                    <span class="analysis-label">Blank Lines</span>
+                    <span class="analysis-value" id="metric-blank">0</span>
+                </div>
+                <div class="analysis-item">
+                    <span class="analysis-label">Comments</span>
+                    <span class="analysis-value" id="metric-comments">0</span>
+                </div>
+                <div class="analysis-item">
+                    <span class="analysis-label">Complexity Score</span>
+                    <span class="analysis-value" id="metric-complexity">Low</span>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Snippets Modal -->
+<div id="snippets-overlay" class="modal-overlay hidden">
+    <div class="snippets-modal">
+        <header class="modal-header">
+            <h3>📚 Code Snippets</h3>
+            <button class="btn-icon" id="close-snippets-btn">✕</button>
+        </header>
+        <div class="snippets-body">
+            <div class="snippets-toolbar">
+                <input type="text" id="snippet-search" placeholder="Search snippets..." class="snippet-search">
+                <button class="btn-primary" id="add-snippet-btn">+ Add Snippet</button>
+            </div>
+            <div class="snippets-list" id="snippets-list">
+                <div class="snippet-empty">No snippets saved yet. Save your first snippet!</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Save Snippet Modal -->
+<div id="save-snippet-overlay" class="modal-overlay hidden">
+    <div class="save-snippet-modal">
+        <header class="modal-header">
+            <h3>📌 Save Snippet</h3>
+            <button class="btn-icon" id="close-save-snippet-btn">✕</button>
+        </header>
+        <div class="save-snippet-body">
+            <div class="form-group">
+                <label for="snippet-name">Name</label>
+                <input type="text" id="snippet-name" placeholder="My awesome snippet">
+            </div>
+            <div class="form-group">
+                <label for="snippet-description">Description</label>
+                <input type="text" id="snippet-description" placeholder="What does this code do?">
+            </div>
+            <div class="form-group">
+                <label for="snippet-tags">Tags (comma separated)</label>
+                <input type="text" id="snippet-tags" placeholder="utility, helper, api">
+            </div>
+            <div class="form-actions">
+                <button class="btn-secondary" id="cancel-snippet-btn">Cancel</button>
+                <button class="btn-primary" id="confirm-save-snippet-btn">Save Snippet</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Live Preview Panel -->
+<div id="preview-panel" class="preview-panel hidden">
+    <div class="preview-header">
+        <h3>👁️ Live Preview</h3>
+        <div class="preview-controls">
+            <button class="btn-icon" id="refresh-preview-btn" title="Refresh">🔄</button>
+            <button class="btn-icon" id="close-preview-btn" title="Close">✕</button>
+        </div>
+    </div>
+    <iframe id="preview-iframe" class="preview-iframe"></iframe>
+</div>
+
+<!-- Diff Modal -->
+<div id="diff-overlay" class="diff-overlay hidden">
+    <div class="diff-modal">
+        <header class="diff-header">
+            <h3>🔍 Review Suggested Changes</h3>
+            <div style="display: flex; gap: 0.75rem;">
+                <button class="btn-primary" id="apply-diff-btn">✓ Apply Changes</button>
+                <button class="btn-icon" id="close-diff-btn">✕</button>
+            </div>
+        </header>
+        <div class="diff-body" id="diff-content"></div>
+    </div>
+</div>
+
+<!-- Settings Modal -->
+<div id="settings-overlay" class="settings-overlay hidden">
+    <div class="settings-modal">
+        <header class="settings-header">
+            <h3>⚙️ Settings</h3>
+            <button class="btn-icon" id="close-settings-btn">✕</button>
+        </header>
+        <div class="settings-body">
+            <div class="settings-group">
+                <h4>Editor</h4>
+                <div class="settings-item">
+                    <div class="settings-label">
+                        Font Size
+                        <small>Editor font size in pixels</small>
+                    </div>
+                    <select id="setting-font-size" class="action-btn">
+                        <option value="12">12px</option>
+                        <option value="13">13px</option>
+                        <option value="14" selected>14px</option>
+                        <option value="15">15px</option>
+                        <option value="16">16px</option>
+                        <option value="18">18px</option>
+                    </select>
+                </div>
+                <div class="settings-item">
+                    <div class="settings-label">
+                        Word Wrap
+                        <small>Wrap long lines</small>
+                    </div>
+                    <select id="setting-word-wrap" class="action-btn">
+                        <option value="off">Off</option>
+                        <option value="on" selected>On</option>
+                    </select>
+                </div>
+                <div class="settings-item">
+                    <div class="settings-label">
+                        Minimap
+                        <small>Show code minimap</small>
+                    </div>
+                    <select id="setting-minimap" class="action-btn">
+                        <option value="true">Show</option>
+                        <option value="false" selected>Hide</option>
+                    </select>
+                </div>
+            </div>
+            <div class="settings-group">
+                <h4>AI Assistant</h4>
+                <div class="settings-item">
+                    <div class="settings-label">
+                        Agent Mode
+                        <small>Auto-apply code suggestions</small>
+                    </div>
+                    <select id="setting-agent-mode" class="action-btn">
+                        <option value="off" selected>Off</option>
+                        <option value="on">On</option>
+                    </select>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Data passed from Server -->
+<div id="app-data" 
+    data-is-project="{{ 'true' if code_context and code_context.type == 'project' else 'false' }}"
+    data-current-code="{{ code_context.content if code_context and code_context.type == 'single' else '' }}"
+    data-language="{{ code_context.language if code_context else 'python' }}"
+    data-files='{{ code_context.files|tojson if code_context and code_context.type == "project" else "[]" }}'
+    style="display: none;"></div>
 
 <script>
+    // =====================================================
+    // NexusAI - Professional Code Assistant
+    // =====================================================
+    
+    let editor;
+    let isAgentActive = false;
+    let uploadedFiles = [];
+    let currentFileName = 'untitled.py';
+    
+    // File extension to language mapping
+    const langMap = {
+        'py': 'python', 'js': 'javascript', 'ts': 'typescript', 'jsx': 'javascript',
+        'tsx': 'typescript', 'html': 'html', 'css': 'css', 'json': 'json',
+        'md': 'markdown', 'sql': 'sql', 'go': 'go', 'rs': 'rust', 'java': 'java',
+        'cpp': 'cpp', 'c': 'c', 'cs': 'csharp', 'php': 'php', 'rb': 'ruby',
+        'vue': 'html', 'yaml': 'yaml', 'yml': 'yaml', 'xml': 'xml', 'sh': 'shell'
+    };
+    
+    const fileIcons = {
+        'py': '🐍', 'js': '📜', 'ts': '📘', 'jsx': '⚛️', 'tsx': '⚛️',
+        'html': '🌐', 'css': '🎨', 'json': '📋', 'md': '📝', 'sql': '🗃️',
+        'go': '🐹', 'rs': '🦀', 'java': '☕', 'cpp': '⚙️', 'c': '⚙️',
+        'cs': '🔷', 'php': '🐘', 'rb': '💎', 'vue': '💚', 'default': '📄'
+    };
+
+    // =====================================================
+    // Monaco Editor Initialization
+    // =====================================================
+    require.config({ paths: { 'vs': 'https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.45.0/min/vs' } });
+    require(['vs/editor/editor.main'], function () {
+        const appData = document.getElementById('app-data');
+        const initialCode = appData.getAttribute('data-current-code') || '# Welcome to NexusAI\n# Start coding here...\n\nprint("Hello, World!")\n';
+        const lang = appData.getAttribute('data-language') || 'python';
+
+        editor = monaco.editor.create(document.getElementById('monaco-editor-container'), {
+            value: initialCode,
+            language: lang,
+            theme: 'vs-dark',
+            automaticLayout: true,
+            fontSize: 14,
+            fontFamily: "'JetBrains Mono', 'Fira Code', Consolas, monospace",
+            fontLigatures: true,
+            minimap: { enabled: false },
+            padding: { top: 16, bottom: 16 },
+            scrollBeyondLastLine: false,
+            smoothScrolling: true,
+            cursorBlinking: 'smooth',
+            cursorSmoothCaretAnimation: 'on',
+            renderLineHighlight: 'all',
+            lineNumbers: 'on',
+            wordWrap: 'on',
+            tabSize: 4,
+            insertSpaces: true,
+            formatOnPaste: true,
+            formatOnType: true,
+            bracketPairColorization: { enabled: true },
+            guides: { bracketPairs: true, indentation: true }
+        });
+
+        // Set language select
+        document.getElementById('language-select').value = lang;
+        
+        // Initialize UI
+        renderFileTree();
+        attachEventHandlers();
+        
+        // Status Bar Updates
+        function updateStatusBar() {
+            const code = editor ? editor.getValue() : '';
+            const lines = code.split('\n').length;
+            const chars = code.length;
+            const pos = editor ? editor.getPosition() : { lineNumber: 1, column: 1 };
+            
+            const linesEl = document.getElementById('status-lines');
+            const charsEl = document.getElementById('status-chars');
+            const cursorEl = document.getElementById('status-cursor');
+            
+            if (linesEl) linesEl.textContent = lines;
+            if (charsEl) charsEl.textContent = chars;
+            if (cursorEl) cursorEl.textContent = `Ln ${pos.lineNumber}, Col ${pos.column}`;
+        }
+        
+        editor.onDidChangeCursorPosition(updateStatusBar);
+        editor.onDidChangeModelContent(updateStatusBar);
+        updateStatusBar();
+        
+        // Keyboard shortcuts
+        editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.Enter, runCode);
+        editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, saveToWorkspace);
+        
+        // Sync with EditorManager from app.js
+        if (typeof EditorManager !== 'undefined') {
+            EditorManager.instance = editor;
+            window.NexusAI && (window.NexusAI.editor = editor);
+        }
+        
+        showToast('Editor ready', 'success');
+    });
+
+    // =====================================================
+    // File Tree
+    // =====================================================
+    function renderFileTree() {
+        const appData = document.getElementById('app-data');
+        const files = JSON.parse(appData.getAttribute('data-files') || "[]");
+        const treeContainer = document.getElementById('explorer-tree');
+
+        if (files.length === 0) return;
+
+        treeContainer.innerHTML = '';
+        files.forEach((file, index) => {
+            const ext = file.name.split('.').pop().toLowerCase();
+            const icon = fileIcons[ext] || fileIcons.default;
+            
+            const item = document.createElement('div');
+            item.className = 'tree-item' + (index === 0 ? ' active' : '');
+            item.innerHTML = `<span class="tree-icon">${icon}</span><span class="tree-file">${file.name}</span>`;
+            item.onclick = () => selectFile(item, file);
+            treeContainer.appendChild(item);
+        });
+    }
+
+    function selectFile(element, file) {
+        document.querySelectorAll('.tree-item').forEach(i => i.classList.remove('active'));
+        element.classList.add('active');
+        
+        editor.setValue(file.content);
+        const lang = langMap[file.name.split('.').pop().toLowerCase()] || 'plaintext';
+        monaco.editor.setModelLanguage(editor.getModel(), lang);
+        document.getElementById('language-select').value = lang;
+        document.getElementById('current-filename').innerText = file.name;
+        currentFileName = file.name;
+    }
+
+    function addFileToTree(fileName, content, language) {
+        const treeContainer = document.getElementById('explorer-tree');
+        const ext = fileName.split('.').pop().toLowerCase();
+        const icon = fileIcons[ext] || fileIcons.default;
+        
+        const item = document.createElement('div');
+        item.className = 'tree-item';
+        item.innerHTML = `<span class="tree-icon">${icon}</span><span class="tree-file">${fileName}</span>`;
+        
+        const file = { name: fileName, content, language };
+        item.onclick = () => selectFile(item, file);
+        
+        treeContainer.appendChild(item);
+        selectFile(item, file);
+        uploadedFiles.push(file);
+    }
+
+    // =====================================================
+    // Event Handlers
+    // =====================================================
+    function attachEventHandlers() {
+        // File Upload
+        document.getElementById('file-input').addEventListener('change', handleFileUpload);
+        
+        // Vision/Image Upload
+        document.getElementById('vision-input').addEventListener('change', handleVisionUpload);
+        
+        // GitHub Clone
+        document.getElementById('github-sync-btn').addEventListener('click', handleGitHubClone);
+        
+        // New File
+        document.getElementById('new-file-btn').addEventListener('click', () => {
+            const fileName = prompt('Enter file name:', 'new_file.py');
+            if (fileName) {
+                const ext = fileName.split('.').pop().toLowerCase();
+                const lang = langMap[ext] || 'plaintext';
+                addFileToTree(fileName, '', lang);
+                showToast(`Created ${fileName}`, 'success');
+            }
+        });
+        
+        // Download
+        document.getElementById('download-btn').addEventListener('click', () => {
+            const code = editor.getValue();
+            const blob = new Blob([code], { type: 'text/plain' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = currentFileName;
+            a.click();
+            URL.revokeObjectURL(url);
+            showToast(`Downloaded ${currentFileName}`, 'success');
+        });
+        
+        // Format Code
+        document.getElementById('format-btn').addEventListener('click', () => {
+            editor.getAction('editor.action.formatDocument').run();
+            showToast('Code formatted', 'success');
+        });
+        
+        // Code Metrics Button
+        document.getElementById('metrics-btn')?.addEventListener('click', () => {
+            if (window.CodeMetrics) CodeMetrics.show();
+        });
+        
+        // Snippets Button
+        document.getElementById('snippets-btn')?.addEventListener('click', () => {
+            if (window.SnippetManager) SnippetManager.show();
+        });
+        
+        // Template Buttons
+        document.querySelectorAll('.template-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const templateId = btn.getAttribute('data-template');
+                loadTemplate(templateId);
+            });
+        });
+        
+        // Run Button
+        document.getElementById('run-btn').addEventListener('click', runCode);
+        
+        // Save Button
+        document.getElementById('save-btn').addEventListener('click', saveToWorkspace);
+        
+        // Language Select
+        document.getElementById('language-select').addEventListener('change', (e) => {
+            monaco.editor.setModelLanguage(editor.getModel(), e.target.value);
+            showToast(`Language: ${e.target.value}`, 'info');
+        });
+        
+        // Agent Mode Toggle
+        document.getElementById('agent-mode-btn').addEventListener('click', () => {
+            isAgentActive = !isAgentActive;
+            const btn = document.getElementById('agent-mode-btn');
+            btn.classList.toggle('active', isAgentActive);
+            btn.innerHTML = isAgentActive ? '🤖 Agent ✓' : '🤖 Agent';
+            showToast(`Agent mode ${isAgentActive ? 'enabled' : 'disabled'}`, 'info');
+            logToTerminal(`🤖 Agent mode ${isAgentActive ? 'enabled - AI will auto-apply code changes' : 'disabled'}`, 'info');
+        });
+        
+        // Settings
+        document.getElementById('settings-btn').addEventListener('click', () => {
+            document.getElementById('settings-overlay').classList.remove('hidden');
+        });
+        
+        document.getElementById('close-settings-btn').addEventListener('click', () => {
+            document.getElementById('settings-overlay').classList.add('hidden');
+        });
+        
+        // Settings changes
+        document.getElementById('setting-font-size').addEventListener('change', (e) => {
+            editor.updateOptions({ fontSize: parseInt(e.target.value) });
+        });
+        
+        document.getElementById('setting-word-wrap').addEventListener('change', (e) => {
+            editor.updateOptions({ wordWrap: e.target.value });
+        });
+        
+        document.getElementById('setting-minimap').addEventListener('change', (e) => {
+            editor.updateOptions({ minimap: { enabled: e.target.value === 'true' } });
+        });
+        
+        // Clear Chat
+        document.getElementById('clear-chat').addEventListener('click', async () => {
+            if (confirm('Clear chat history?')) {
+                try { await fetch('/clear'); } catch (e) { }
+                document.getElementById('chat-box').innerHTML = `
+                    <div class="message ai-message">
+                        <div class="content-wrapper">💫 Chat cleared. How can I help you?</div>
+                    </div>`;
+                showToast('Chat cleared', 'info');
+            }
+        });
+        
+        // Export Chat
+        document.getElementById('export-chat-btn').addEventListener('click', exportChat);
+        
+        // Clear Terminal
+        document.getElementById('clear-terminal-btn').addEventListener('click', clearTerminal);
+        
+        // Fix Error Button
+        document.getElementById('fix-error-btn').addEventListener('click', () => {
+            document.getElementById('user-input').value = "How do I fix the error shown in the terminal?";
+            document.getElementById('chat-form').dispatchEvent(new Event('submit'));
+            document.getElementById('fix-error-btn').classList.add('hidden');
+        });
+        
+        // Action Toolbar
+        document.querySelectorAll('.action-toolbar .action-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const action = e.target.getAttribute('data-action');
+                if (!action) return;
+                
+                const code = editor.getValue();
+                const prompts = {
+                    'explain': `Explain this code in detail:\n\`\`\`\n${code}\n\`\`\``,
+                    'debug': `Find and explain any bugs or issues in this code:\n\`\`\`\n${code}\n\`\`\``,
+                    'tests': `Write comprehensive unit tests for this code:\n\`\`\`\n${code}\n\`\`\``,
+                    'optimize': `Optimize this code for better performance and readability:\n\`\`\`\n${code}\n\`\`\``,
+                    'document': `Add detailed documentation and comments to this code:\n\`\`\`\n${code}\n\`\`\``
+                };
+                
+                if (prompts[action]) {
+                    document.getElementById('user-input').value = prompts[action];
+                    document.getElementById('chat-form').dispatchEvent(new Event('submit'));
+                }
+            });
+        });
+        
+        // Diff Modal
+        document.getElementById('close-diff-btn').addEventListener('click', closeDiff);
+        document.getElementById('apply-diff-btn').addEventListener('click', applyDiff);
+        
+        // Close settings on overlay click
+        document.getElementById('settings-overlay').addEventListener('click', (e) => {
+            if (e.target === e.currentTarget) {
+                document.getElementById('settings-overlay').classList.add('hidden');
+            }
+        });
+        
+        // Global keyboard shortcuts
+        document.addEventListener('keydown', (e) => {
+            if (e.ctrlKey && e.key === 'o') {
+                e.preventDefault();
+                document.getElementById('file-input').click();
+            }
+            if (e.ctrlKey && e.key === 'n') {
+                e.preventDefault();
+                document.getElementById('new-file-btn').click();
+            }
+        });
+    }
+
+    // =====================================================
+    // File Handlers
+    // =====================================================
+    async function handleFileUpload(e) {
+        const file = e.target.files[0];
+        if (!file) return;
+
+        logToTerminal(`📂 Uploading: ${file.name}...`, 'info');
+
+        const formData = new FormData();
+        formData.append('file', file);
+        
+        try {
+            const response = await fetch('/upload', { method: 'POST', body: formData });
+            const data = await response.json();
+            
+            if (data.success) {
+                showToast(`Uploaded: ${data.name}`, 'success');
+                logToTerminal(`✅ Uploaded: ${data.name} (${data.type})`, 'out');
+                
+                // Read file content for editor
+                const reader = new FileReader();
+                reader.onload = (event) => {
+                    const content = event.target.result;
+                    const ext = file.name.split('.').pop().toLowerCase();
+                    const lang = langMap[ext] || 'plaintext';
+                    addFileToTree(file.name, content, lang);
+                };
+                reader.readAsText(file);
+            } else {
+                throw new Error(data.error);
+            }
+        } catch (err) {
+            showToast(`Upload failed: ${err.message}`, 'error');
+            logToTerminal(`❌ Upload failed: ${err.message}`, 'err');
+        }
+        
+        e.target.value = '';
+    }
+
+    async function handleVisionUpload(e) {
+        const file = e.target.files[0];
+        if (!file) return;
+
+        logToTerminal("🖼️ Analyzing image...", 'info');
+        showToast('Processing image...', 'info');
+
+        const formData = new FormData();
+        formData.append('file', file);
+
+        try {
+            const response = await fetch('/vision-analyze', { method: 'POST', body: formData });
+            const data = await response.json();
+
+            if (data.success && data.code) {
+                const lang = data.language || 'html';
+                addFileToTree('generated.' + (lang === 'python' ? 'py' : 'html'), data.code, lang);
+                showToast('Code generated from image!', 'success');
+                logToTerminal("✅ Code generated from image", 'out');
+            } else {
+                throw new Error(data.error || 'Vision analysis failed');
+            }
+        } catch (err) {
+            showToast(`Vision failed: ${err.message}`, 'error');
+            logToTerminal(`⚠️ Vision: ${err.message}`, 'err');
+        }
+        
+        e.target.value = '';
+    }
+
+    async function handleGitHubClone() {
+        const repoUrl = prompt('Enter GitHub repository URL:\n\nExample: https://github.com/user/repo');
+        if (!repoUrl?.trim()) return;
+
+        logToTerminal("🌐 Cloning repository...", 'info');
+        showToast('Cloning repository...', 'info');
+
+        try {
+            const response = await fetch('/github-clone', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ url: repoUrl.trim() })
+            });
+            const data = await response.json();
+
+            if (data.success) {
+                showToast(`Cloned successfully!`, 'success');
+                logToTerminal(`✅ Cloned: ${data.files?.length || 0} files`, 'out');
+                
+                if (data.files?.length > 0) {
+                    data.files.forEach(file => {
+                        const ext = file.name.split('.').pop().toLowerCase();
+                        const lang = langMap[ext] || 'plaintext';
+                        addFileToTree(file.name, file.content, lang);
+                    });
+                }
+            } else {
+                throw new Error(data.error);
+            }
+        } catch (err) {
+            showToast(`Clone failed: ${err.message}`, 'error');
+            logToTerminal(`❌ Clone failed: ${err.message}`, 'err');
+        }
+    }
+
+    // =====================================================
+    // Code Execution
+    // =====================================================
+    async function runCode() {
+        const code = editor.getValue();
+        const lang = editor.getModel().getLanguageId();
+
+        if (!code.trim()) {
+            showToast('No code to run', 'warning');
+            return;
+        }
+
+        const btn = document.getElementById('run-btn');
+        btn.disabled = true;
+        btn.innerHTML = '⏳ Running...';
+        logToTerminal(`▶ Running ${lang} code...`, 'info');
+
+        // Handle stdin for input() calls
+        let stdinData = "";
+        if (code.includes('input(')) {
+            const userInput = prompt("This script requires input.\nEnter value(s) (one per line):");
+            if (userInput === null) {
+                btn.disabled = false;
+                btn.innerHTML = '▶ Run';
+                logToTerminal("⚠️ Execution cancelled", 'err');
+                return;
+            }
+            stdinData = userInput;
+        }
+
+        try {
+            const res = await fetch('/run-code', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ code, language: lang, stdin: stdinData })
+            });
+
+            const data = await res.json();
+            
+            if (data.output) logToTerminal(data.output, 'out');
+            if (data.error) {
+                logToTerminal(data.error, 'err');
+                document.getElementById('fix-error-btn').classList.remove('hidden');
+            }
+            
+            if (!data.error && !data.output) {
+                logToTerminal('✅ Executed successfully (no output)', 'out');
+            }
+        } catch (e) {
+            logToTerminal(`❌ Execution failed: ${e.message}`, 'err');
+            showToast('Execution failed', 'error');
+        } finally {
+            btn.disabled = false;
+            btn.innerHTML = '▶ Run';
+        }
+    }
+
+    async function saveToWorkspace() {
+        const code = editor.getValue();
+        const fileName = currentFileName;
+
+        try {
+            const res = await fetch('/write-to-disk', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ path: fileName, content: code })
+            });
+            
+            const data = await res.json();
+            
+            if (data.success) {
+                showToast(`Saved: ${fileName}`, 'success');
+                logToTerminal(`💾 Saved: workspace/${fileName}`, 'out');
+            } else {
+                throw new Error(data.error);
+            }
+        } catch (e) {
+            showToast(`Save failed: ${e.message}`, 'error');
+            logToTerminal(`❌ Save failed: ${e.message}`, 'err');
+        }
+    }
+
+    // =====================================================
+    // Code Templates
+    // =====================================================
+    const codeTemplates = {
+        'python-basic': {
+            code: `# Python Script
+# Author: Your Name
+# Date: ${new Date().toLocaleDateString()}
+
+def main():
+    """Main function"""
+    print("Hello, World!")
+    
+    # Your code here
+    
+if __name__ == '__main__':
+    main()
+`,
+            language: 'python',
+            filename: 'main.py'
+        },
+        'python-class': {
+            code: `# Python Class Template
+from dataclasses import dataclass
+from typing import Optional
+
+@dataclass
+class User:
+    """User model with data validation"""
+    name: str
+    email: str
+    age: Optional[int] = None
+    
+    def greet(self) -> str:
+        """Return a greeting message"""
+        return f"Hello, {self.name}!"
+    
+    def is_adult(self) -> bool:
+        """Check if user is 18+"""
+        return self.age is not None and self.age >= 18
+
+# Usage Example
+if __name__ == '__main__':
+    user = User(name="Alice", email="alice@example.com", age=25)
+    print(user.greet())
+    print(f"Is adult: {user.is_adult()}")
+`,
+            language: 'python',
+            filename: 'user.py'
+        },
+        'js-fetch': {
+            code: `// JavaScript Fetch API Example
+// Async/Await pattern with error handling
+
+const API_BASE = 'https://api.example.com';
+
+async function fetchData(endpoint) {
+    try {
+        const response = await fetch(\`\${API_BASE}\${endpoint}\`);
+        
+        if (!response.ok) {
+            throw new Error(\`HTTP \${response.status}: \${response.statusText}\`);
+        }
+        
+        const data = await response.json();
+        return { success: true, data };
+    } catch (error) {
+        console.error('Fetch error:', error);
+        return { success: false, error: error.message };
+    }
+}
+
+// POST request with JSON body
+async function postData(endpoint, payload) {
+    try {
+        const response = await fetch(\`\${API_BASE}\${endpoint}\`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(payload)
+        });
+        
+        return await response.json();
+    } catch (error) {
+        console.error('Post error:', error);
+        throw error;
+    }
+}
+
+// Usage
+fetchData('/users').then(result => {
+    if (result.success) {
+        console.log('Users:', result.data);
+    }
+});
+`,
+            language: 'javascript',
+            filename: 'api.js'
+        },
+        'html-basic': {
+            code: `<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>My Website</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: system-ui, -apple-system, sans-serif;
+            line-height: 1.6;
+            color: #333;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 0 1rem;
+        }
+        
+        header {
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            color: white;
+            padding: 2rem 0;
+        }
+        
+        header h1 {
+            font-size: 2.5rem;
+        }
+        
+        main {
+            padding: 3rem 0;
+        }
+        
+        .btn {
+            display: inline-block;
+            padding: 0.75rem 1.5rem;
+            background: #667eea;
+            color: white;
+            text-decoration: none;
+            border-radius: 8px;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <div class="container">
+            <h1>Welcome to My Website</h1>
+            <p>A modern, responsive web page</p>
+        </div>
+    </header>
+    
+    <main>
+        <div class="container">
+            <h2>Hello, World!</h2>
+            <p>Start building your amazing website here.</p>
+            <a href="#" class="btn">Get Started</a>
+        </div>
+    </main>
+    
+    <script>
+        console.log('Page loaded!');
+    <\/script>
+</body>
+</html>
+`,
+            language: 'html',
+            filename: 'index.html'
+        },
+        'flask-api': {
+            code: `# Flask REST API Template
+from flask import Flask, jsonify, request
+from functools import wraps
+
+app = Flask(__name__)
+
+# In-memory database (replace with real DB)
+items = []
+
+def require_json(f):
+    """Decorator to require JSON content-type"""
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        if not request.is_json:
+            return jsonify({"error": "Content-Type must be application/json"}), 400
+        return f(*args, **kwargs)
+    return decorated
+
+@app.route('/api/health')
+def health():
+    """Health check endpoint"""
+    return jsonify({"status": "ok", "version": "1.0.0"})
+
+@app.route('/api/items', methods=['GET'])
+def get_items():
+    """Get all items"""
+    return jsonify({"items": items, "count": len(items)})
+
+@app.route('/api/items', methods=['POST'])
+@require_json
+def create_item():
+    """Create a new item"""
+    data = request.json
+    
+    if not data.get('name'):
+        return jsonify({"error": "Name is required"}), 400
+    
+    item = {
+        "id": len(items) + 1,
+        "name": data['name'],
+        "description": data.get('description', '')
+    }
+    items.append(item)
+    
+    return jsonify(item), 201
+
+@app.route('/api/items/&lt;int:item_id&gt;', methods=['GET'])
+def get_item(item_id):
+    """Get a single item by ID"""
+    item = next((i for i in items if i['id'] == item_id), None)
+    if not item:
+        return jsonify({"error": "Item not found"}), 404
+    return jsonify(item)
+
+@app.route('/api/items/&lt;int:item_id&gt;', methods=['DELETE'])
+def delete_item(item_id):
+    """Delete an item"""
+    global items
+    items = [i for i in items if i['id'] != item_id]
+    return jsonify({"success": True})
+
+if __name__ == '__main__':
+    app.run(debug=True, port=5000)
+`,
+            language: 'python',
+            filename: 'app.py'
+        }
+    };
+
+    function loadTemplate(templateId) {
+        const template = codeTemplates[templateId];
+        if (!template) {
+            showToast('Template not found', 'error');
+            return;
+        }
+        
+        // Decode HTML entities in template code
+        let code = template.code;
+        code = code.replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&');
+        
+        editor.setValue(code);
+        monaco.editor.setModelLanguage(editor.getModel(), template.language);
+        document.getElementById('language-select').value = template.language;
+        currentFileName = template.filename;
+        document.getElementById('current-filename').textContent = template.filename;
+        
+        // Update tab
+        const activeTab = document.querySelector('.editor-tab.active .tab-name');
+        if (activeTab) activeTab.textContent = template.filename;
+        
+        showToast(`Loaded: ${template.filename}`, 'success');
+        logToTerminal(`📄 Loaded template: ${template.filename}`, 'info');
+    }
+
+    // =====================================================
+    // Chat
+    // =====================================================
+    const chatForm = document.getElementById('chat-form');
     const chatBox = document.getElementById('chat-box');
-    chatBox.scrollTop = chatBox.scrollHeight;
-
     const textarea = document.getElementById('user-input');
-    const form = document.getElementById('chat-form');
-    const loading = document.getElementById('loading-state');
-    const sendBtn = document.getElementById('send-btn');
 
-    textarea.addEventListener('input', function () {
-        this.style.height = 'auto';
-        this.style.height = (this.scrollHeight) + 'px';
-    });
+    chatForm.onsubmit = async (e) => {
+        e.preventDefault();
+        const input = textarea.value.trim();
+        if (!input) return;
 
-    form.addEventListener('submit', function () {
-        loading.style.display = 'block';
-        sendBtn.disabled = true;
-        sendBtn.style.opacity = '0.5';
-        textarea.readOnly = true;
+        addMessage(input, 'user');
+        textarea.value = '';
+        textarea.style.height = 'auto';
+
+        const aiDiv = addMessage('', 'ai');
+        const contentWrapper = aiDiv.querySelector('.content-wrapper');
+        contentWrapper.innerHTML = '<span class="typing-indicator">Thinking</span>';
+
+        // Sync editor content before sending
+        try {
+            await fetch('/sync-editor', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ content: editor.getValue() })
+            });
+        } catch (e) { }
+
+        const formData = new FormData();
+        formData.append('user_input', input);
+
+        try {
+            const response = await fetch('/chat', { method: 'POST', body: formData });
+            if (!response.ok) throw new Error('Chat request failed');
+
+            const reader = response.body.getReader();
+            const decoder = new TextDecoder();
+            let fullText = "";
+
+            contentWrapper.innerHTML = '';
+
+            while (true) {
+                const { value, done } = await reader.read();
+                if (done) break;
+
+                const chunk = decoder.decode(value);
+                const lines = chunk.split('\n');
+                
+                for (const line of lines) {
+                    if (line.startsWith('data: ')) {
+                        try {
+                            const data = JSON.parse(line.substring(6));
+                            if (data.content) {
+                                fullText += data.content;
+                                contentWrapper.innerHTML = marked.parse(fullText);
+                                hljs.highlightAll();
+                            }
+                        } catch (e) { }
+                    }
+                }
+                chatBox.scrollTop = chatBox.scrollHeight;
+            }
+
+            // Agent mode: auto-apply code
+            if (isAgentActive) {
+                processAgentActions(fullText);
+            }
+        } catch (err) {
+            contentWrapper.innerHTML = `<span style="color:var(--error);">❌ Error: ${err.message}</span>`;
+        }
+    };
+
+    function addMessage(content, role) {
+        const div = document.createElement('div');
+        div.className = `message ${role}-message`;
+        div.setAttribute('data-raw-content', content);
+        const parsed = marked.parse(content || '...');
+        div.innerHTML = `<div class="content-wrapper">${parsed}</div>`;
+        chatBox.appendChild(div);
         chatBox.scrollTop = chatBox.scrollHeight;
-    });
+        return div;
+    }
 
-    textarea.addEventListener('keydown', function (e) {
+    function processAgentActions(text) {
+        const codeMatch = text.match(/```(?:python|javascript|typescript|html|css|json)?\n?([\s\S]*?)```/);
+        if (codeMatch) {
+            editor.setValue(codeMatch[1].trim());
+            logToTerminal("🤖 Agent applied code changes", 'info');
+            showToast('Agent applied code', 'success');
+        }
+    }
+
+    function exportChat() {
+        const messages = document.querySelectorAll('.message');
+        let text = "# NexusAI Chat Export\n\n";
+        
+        messages.forEach(msg => {
+            const role = msg.classList.contains('user-message') ? 'User' : 'Assistant';
+            const content = msg.getAttribute('data-raw-content') || msg.textContent;
+            text += `## ${role}\n${content}\n\n`;
+        });
+        
+        const blob = new Blob([text], { type: 'text/markdown' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'nexusai-chat.md';
+        a.click();
+        URL.revokeObjectURL(url);
+        showToast('Chat exported', 'success');
+    }
+
+    // =====================================================
+    // Terminal
+    // =====================================================
+    function logToTerminal(text, type = 'out') {
+        const term = document.getElementById('terminal');
+        const line = document.createElement('div');
+        line.className = `term-line term-${type}`;
+        line.innerText = `> ${text}`;
+        term.appendChild(line);
+        term.scrollTop = term.scrollHeight;
+
+        if (type === 'err') {
+            document.getElementById('fix-error-btn').classList.remove('hidden');
+        }
+    }
+
+    function clearTerminal() {
+        document.getElementById('terminal').innerHTML = '<div class="term-line term-info">✨ Terminal cleared</div>';
+        document.getElementById('fix-error-btn').classList.add('hidden');
+    }
+
+    // =====================================================
+    // Diff Modal
+    // =====================================================
+    function closeDiff() {
+        document.getElementById('diff-overlay').classList.add('hidden');
+    }
+
+    function applyDiff() {
+        const code = document.getElementById('diff-content').getAttribute('data-merged-code');
+        if (code) {
+            editor.setValue(code);
+            showToast('Changes applied', 'success');
+            closeDiff();
+        }
+    }
+
+    // =====================================================
+    // Initialization
+    // =====================================================
+    // Auto-resize textarea
+    textarea.addEventListener('input', function() {
+        this.style.height = 'auto';
+        this.style.height = Math.min(this.scrollHeight, 120) + 'px';
+    });
+    
+    // Submit on Enter
+    textarea.addEventListener('keydown', function(e) {
         if (e.key === 'Enter' && !e.shiftKey) {
             e.preventDefault();
-            form.dispatchEvent(new Event('submit'));
-            form.submit();
+            chatForm.dispatchEvent(new Event('submit'));
         }
     });
+
+    // Render existing history
+    document.querySelectorAll('.message .content-wrapper').forEach(wrapper => {
+        const raw = wrapper.parentElement.getAttribute('data-raw-content');
+        if (raw && typeof marked !== 'undefined') {
+            wrapper.innerHTML = marked.parse(raw);
+        }
+    });
+
+    if (typeof hljs !== 'undefined') {
+        hljs.highlightAll();
+    }
+    
+    // =====================================================
+    // Command Palette Button
+    // =====================================================
+    document.getElementById('cmd-palette-btn')?.addEventListener('click', () => {
+        if (window.CommandPalette) CommandPalette.show();
+    });
+    
+    // Preview button
+    document.getElementById('preview-btn')?.addEventListener('click', () => {
+        if (window.LivePreview) LivePreview.toggle();
+    });
+    
+    // Close shortcuts modal
+    document.getElementById('close-shortcuts-btn')?.addEventListener('click', () => {
+        document.getElementById('shortcuts-overlay')?.classList.add('hidden');
+    });
 </script>
+
+<!-- Professional Status Bar -->
+<div class="status-bar">
+    <div class="status-left">
+        <div class="status-item">
+            <span class="status-dot"></span>
+            <span>Ready</span>
+        </div>
+        <div class="status-item">
+            <span>📄</span>
+            <span id="status-lines">0</span> lines
+        </div>
+        <div class="status-item">
+            <span id="status-chars">0</span> chars
+        </div>
+    </div>
+    <div class="status-right">
+        <div class="status-item" id="status-cursor">Ln 1, Col 1</div>
+        <div class="status-item">
+            <span>UTF-8</span>
+        </div>
+        <div class="status-item" style="cursor: pointer;" onclick="if(window.CommandPalette) CommandPalette.show()">
+            <span>⌘</span>
+            <span>Ctrl+Shift+P</span>
+        </div>
+        <div class="status-item">
+            <span>NexusAI v2.1</span>
+        </div>
+    </div>
+</div>
 {% endblock %}

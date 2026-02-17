@@ -8,12 +8,38 @@ __pycache__/
 venv/
 .venv/
 env/
-.env/
-
-# IDEs
-.vscode/
-.idea/
+*.pyc
+*.pyo
+*.egg-info/
+dist/
+build/
+*.egg
 
 # Flask
 instance/
 .webassets-cache
+flask_session/
+
+# Workspace (user-generated files)
+workspace/
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Distribution
+*.tar.gz
+*.whl

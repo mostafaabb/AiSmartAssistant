@@ -1,3 +1,18 @@
-flask
-requests
-python-dotenv
+# ============================================
+# NexusAI - Dependencies
+# ============================================
+# Install with: pip install -r requirements.txt
+# ============================================
+
+# Web Framework
+Flask>=3.0.0
+Werkzeug>=3.0.0
+
+# HTTP Client (for OpenRouter API)
+requests>=2.31.0
+
+# Environment Variables
+python-dotenv>=1.0.0
+
+# Session Management (optional)
+Flask-Session>=0.5.0

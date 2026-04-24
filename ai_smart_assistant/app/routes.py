@@ -160,11 +160,10 @@ def chat():
         
         # Models to try - using most reliable free models (ordered by quality)
         models_to_try = [
-            "deepseek/deepseek-r1-0528:free",
-            "google/gemini-2.0-flash-exp:free",
             "meta-llama/llama-3.3-70b-instruct:free",
-            "qwen/qwen-2.5-72b-instruct:free",
-            "microsoft/phi-3-medium-128k-instruct:free"
+            "qwen/qwen3-coder:free",
+            "google/gemma-4-31b-it:free",
+            "liquid/lfm-2.5-1.2b-thinking:free"
         ]
         
         full_response = ""
@@ -465,11 +464,10 @@ def syntax_check():
 def list_models():
     """List available AI models"""
     models = [
-        {"id": "deepseek/deepseek-r1-0528:free", "name": "DeepSeek R1", "description": "Latest reasoning model"},
-        {"id": "google/gemini-2.0-flash-exp:free", "name": "Gemini 2.0 Flash", "description": "Fast & capable"},
-        {"id": "meta-llama/llama-3.3-70b-instruct:free", "name": "Llama 3.3 70B", "description": "Open-source powerhouse"},
-        {"id": "qwen/qwen-2.5-72b-instruct:free", "name": "Qwen 2.5 72B", "description": "Multilingual expert"},
-        {"id": "microsoft/phi-3-medium-128k-instruct:free", "name": "Phi-3 Medium", "description": "Compact & efficient"}
+        {"id": "meta-llama/llama-3.3-70b-instruct:free", "name": "Llama 3.3 70B", "description": "Powerful general purpose model"},
+        {"id": "qwen/qwen3-coder:free", "name": "Qwen 3 Coder", "description": "Specialized for code generation"},
+        {"id": "google/gemma-4-31b-it:free", "name": "Gemma 4 31B", "description": "Latest Google open model"},
+        {"id": "liquid/lfm-2.5-1.2b-thinking:free", "name": "Liquid Thinking", "description": "Reasoning focused model"}
     ]
     return jsonify({"models": models})
 

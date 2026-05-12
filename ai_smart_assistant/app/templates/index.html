@@ -2,7 +2,7 @@
 
 {% block content %}
 <!-- Left Pane: Project Explorer -->
-<aside class="explorer-pane">
+<aside class="explorer-pane" id="explorer-pane">
     <section class="panel" style="height: 100%;">
         <header class="panel-header">
             <h2><span>📁</span> Explorer</h2>
@@ -56,6 +56,8 @@
         </div>
         <div style="padding: 0.5rem 1rem 1rem; display: flex; flex-direction: column; gap: 0.5rem;">
             <label for="vision-input" class="action-btn" style="justify-content: center;">📸 Image to Code</label>
+            <button id="find-workspace-btn" class="action-btn" style="justify-content: center;">🔎 Find in Workspace</button>
+            <button id="refresh-workspace-btn" class="action-btn" style="justify-content: center;">🔄 Refresh Files</button>
             <button id="download-btn" class="action-btn" style="justify-content: center;">💾 Download Code</button>
             <button id="format-btn" class="action-btn" style="justify-content: center;">✨ Format Code</button>
             <button id="metrics-btn" class="action-btn" style="justify-content: center;">📊 Code Metrics</button>
@@ -66,8 +68,11 @@
     </section>
 </aside>
 
+<div class="resize-handle resize-handle-h" id="resize-explorer" role="separator" aria-orientation="vertical" title="Drag to resize · double-click to reset"></div>
+
 <!-- Center Pane: Editor & Terminal -->
 <main class="editor-pane-group">
+    <div class="editor-stack">
     <div class="panel editor-panel">
         <!-- Editor Tabs -->
         <div class="editor-tabs" id="editor-tabs">
@@ -124,6 +129,10 @@
             </div>
             <div style="flex: 1;"></div>
             <div style="display: flex; gap: 0.5rem; align-items: center;">
+                <button class="action-btn" id="toggle-explorer-btn" title="Toggle explorer (Ctrl+Shift+B)">📁</button>
+                <button class="action-btn" id="toggle-chat-btn" title="Toggle AI panel (Ctrl+Shift+J)">💬</button>
+                <button class="action-btn" id="focus-mode-btn" title="Focus mode — hide side panels (Ctrl+Shift+M)">⛶</button>
+                <button class="action-btn" id="copy-selection-chat-btn" title="Insert selection into chat">📎</button>
                 <button class="action-btn" id="preview-btn" title="Live Preview (HTML/CSS)">👁️ Preview</button>
                 <button class="action-btn" id="save-btn" title="Save to Workspace (Ctrl+S)">💾 Save</button>
                 <button class="action-btn" id="run-btn" title="Run Code (Ctrl+Enter)" style="background: var(--success); color: white; border-color: var(--success);">▶ Run</button>
@@ -135,6 +144,8 @@
         <div id="monaco-editor-container"></div>
     </div>
 
+    <div class="resize-handle resize-handle-v" id="resize-terminal" role="separator" aria-orientation="horizontal" title="Drag to resize terminal · double-click to reset"></div>
+
     <div class="panel terminal-panel" id="terminal-panel">
         <div class="panel-header">
             <h2 style="font-size: 0.85rem;"><span>💻</span> Terminal</h2>
@@ -143,12 +154,19 @@
                 <button class="btn-icon" id="clear-terminal-btn" title="Clear Terminal">🧹</button>
             </div>
         </div>
+        <div class="terminal-stdin-wrap">
+            <label for="run-stdin-input" class="terminal-stdin-label">stdin</label>
+            <textarea id="run-stdin-input" class="terminal-stdin-input" rows="1" placeholder="Optional stdin for next run (lines = separate inputs)"></textarea>
+        </div>
         <div class="terminal-output" id="terminal">
             <div class="term-line term-info">✨ NexusAI Ready - Your intelligent coding assistant</div>
             <div class="term-line">Press <span class="kbd">Ctrl</span>+<span class="kbd">Enter</span> to run code</div>
         </div>
     </div>
+    </div>
 </main>
+
+<div class="resize-handle resize-handle-h" id="resize-chat" role="separator" aria-orientation="vertical" title="Drag to resize · double-click to reset"></div>
 
 <!-- Right Pane: Chat -->
 <aside class="chat-pane" id="chat-pane">
@@ -160,6 +178,13 @@
                 <button id="clear-chat" class="btn-icon" title="Clear Chat">🗑️</button>
             </div>
         </header>
+
+        <div class="chat-controls">
+            <label class="chat-control-label" for="ai-model-select">Model</label>
+            <select id="ai-model-select" class="chat-select" title="OpenRouter model"></select>
+            <label class="chat-control-label" for="ai-mode-select">Mode</label>
+            <select id="ai-mode-select" class="chat-select" title="How the assistant should behave"></select>
+        </div>
 
         <div class="chat-box" id="chat-box">
             {% for msg in history %}
@@ -191,12 +216,18 @@
             {% endif %}
         </div>
 
-        <div class="action-toolbar">
+        <div class="action-toolbar action-toolbar-scroll">
             <button class="action-btn" data-action="explain" title="Explain the current code">💡 Explain</button>
             <button class="action-btn" data-action="debug" title="Find bugs in the code">🐛 Debug</button>
             <button class="action-btn" data-action="tests" title="Generate unit tests">🧪 Tests</button>
             <button class="action-btn" data-action="optimize" title="Optimize the code">⚡ Optimize</button>
             <button class="action-btn" data-action="document" title="Add documentation">📝 Document</button>
+            <button class="action-btn" data-action="refactor" title="Refactor for clarity">🔧 Refactor</button>
+            <button class="action-btn" data-action="review" title="Senior code review">👁 Review</button>
+            <button class="action-btn" data-action="security" title="Security review">🔐 Security</button>
+            <button class="action-btn" data-action="architecture" title="Architecture feedback">🏛 Arch</button>
+            <button class="action-btn" data-action="types" title="Improve types">📐 Types</button>
+            <button class="action-btn" data-action="commit" title="Commit message">📌 Commit</button>
         </div>
 
         <form id="chat-form" class="input-area">
@@ -239,6 +270,10 @@
             </div>
             <div class="command-group">
                 <div class="command-group-title">View</div>
+                <div class="command-item" data-command="toggleExplorerPanel"><span class="cmd-icon">📁</span> Toggle Explorer <span class="cmd-shortcut">Ctrl+Shift+B</span></div>
+                <div class="command-item" data-command="toggleChatPanel"><span class="cmd-icon">💬</span> Toggle AI Chat <span class="cmd-shortcut">Ctrl+Shift+J</span></div>
+                <div class="command-item" data-command="focusMode"><span class="cmd-icon">⛶</span> Focus Mode <span class="cmd-shortcut">Ctrl+Shift+M</span></div>
+                <div class="command-item" data-command="copySelectionToChat"><span class="cmd-icon">📎</span> Selection → Chat</div>
                 <div class="command-item" data-command="toggleTheme"><span class="cmd-icon">🌓</span> Toggle Theme</div>
                 <div class="command-item" data-command="openSettings"><span class="cmd-icon">⚙️</span> Open Settings</div>
                 <div class="command-item" data-command="showShortcuts"><span class="cmd-icon">⌨️</span> Keyboard Shortcuts</div>
@@ -249,6 +284,29 @@
                 <div class="command-item" data-command="saveSnippet"><span class="cmd-icon">📌</span> Save as Snippet</div>
                 <div class="command-item" data-command="browseSnippets"><span class="cmd-icon">📚</span> Browse Snippets</div>
             </div>
+            <div class="command-group">
+                <div class="command-group-title">Workspace</div>
+                <div class="command-item" data-command="findInWorkspace"><span class="cmd-icon">🔎</span> Find in Workspace <span class="cmd-shortcut">Ctrl+Shift+F</span></div>
+                <div class="command-item" data-command="refreshWorkspace"><span class="cmd-icon">🔄</span> Refresh Workspace Tree</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Find in Workspace -->
+<div id="find-workspace-overlay" class="modal-overlay hidden">
+    <div class="find-workspace-modal">
+        <header class="modal-header">
+            <h3>🔎 Find in Workspace</h3>
+            <button type="button" class="btn-icon" id="close-find-workspace-btn">✕</button>
+        </header>
+        <div class="find-workspace-body">
+            <div class="find-workspace-search-row">
+                <input type="search" id="find-workspace-input" class="snippet-search" placeholder="Search text in workspace files..." autocomplete="off">
+                <button type="button" class="btn-primary" id="find-workspace-run">Search</button>
+            </div>
+            <p class="find-workspace-hint">Searches UTF-8 text files under <code>workspace/</code>. Binary files are skipped.</p>
+            <div class="find-workspace-results" id="find-workspace-results"></div>
         </div>
     </div>
 </div>
@@ -261,6 +319,15 @@
             <button class="btn-icon" id="close-shortcuts-btn">✕</button>
         </header>
         <div class="shortcuts-body">
+            <div class="shortcuts-section">
+                <h4>Layout</h4>
+                <div class="shortcut-item"><span class="keys"><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>B</kbd></span><span>Toggle explorer</span></div>
+                <div class="shortcut-item"><span class="keys"><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>J</kbd></span><span>Toggle AI chat</span></div>
+                <div class="shortcut-item"><span class="keys"><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>M</kbd></span><span>Focus mode (hide sides)</span></div>
+                <div class="shortcut-item"><span class="keys">Drag</span><span>Resize panels (grips between columns / above terminal)</span></div>
+                <div class="shortcut-item"><span class="keys">Double-click grip</span><span>Reset that panel size</span></div>
+                <div class="shortcut-item"><span class="keys"><kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>Q</kbd></span><span>Insert selection into chat</span></div>
+            </div>
             <div class="shortcuts-section">
                 <h4>General</h4>
                 <div class="shortcut-item"><span class="keys"><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>P</kbd></span><span>Command Palette</span></div>
@@ -285,6 +352,7 @@
                 <div class="shortcut-item"><span class="keys"><kbd>Ctrl</kbd>+<kbd>-</kbd></span><span>Decrease Font</span></div>
                 <div class="shortcut-item"><span class="keys"><kbd>Ctrl</kbd>+<kbd>F</kbd></span><span>Find</span></div>
                 <div class="shortcut-item"><span class="keys"><kbd>Ctrl</kbd>+<kbd>H</kbd></span><span>Replace</span></div>
+                <div class="shortcut-item"><span class="keys"><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>F</kbd></span><span>Find in Workspace</span></div>
             </div>
         </div>
     </div>
@@ -490,7 +558,14 @@
     let editor;
     let isAgentActive = false;
     let uploadedFiles = [];
+    let workspaceFileList = [];
     let currentFileName = 'untitled.py';
+
+    function escapeHtml(s) {
+        const d = document.createElement('div');
+        d.textContent = s;
+        return d.innerHTML;
+    }
     
     // File extension to language mapping
     const langMap = {
@@ -546,7 +621,8 @@
         document.getElementById('language-select').value = lang;
         
         // Initialize UI
-        renderFileTree();
+        refreshWorkspaceTree();
+        loadAiSelectors();
         attachEventHandlers();
         
         // Status Bar Updates
@@ -568,6 +644,10 @@
         editor.onDidChangeCursorPosition(updateStatusBar);
         editor.onDidChangeModelContent(updateStatusBar);
         updateStatusBar();
+
+        window.addEventListener('resize', () => {
+            if (editor) editor.layout();
+        });
         
         // Keyboard shortcuts
         editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.Enter, runCode);
@@ -583,55 +663,242 @@
     });
 
     // =====================================================
-    // File Tree
+    // File Tree & workspace (session + disk)
     // =====================================================
-    function renderFileTree() {
-        const appData = document.getElementById('app-data');
-        const files = JSON.parse(appData.getAttribute('data-files') || "[]");
-        const treeContainer = document.getElementById('explorer-tree');
-
-        if (files.length === 0) return;
-
-        treeContainer.innerHTML = '';
-        files.forEach((file, index) => {
-            const ext = file.name.split('.').pop().toLowerCase();
-            const icon = fileIcons[ext] || fileIcons.default;
-            
-            const item = document.createElement('div');
-            item.className = 'tree-item' + (index === 0 ? ' active' : '');
-            item.innerHTML = `<span class="tree-icon">${icon}</span><span class="tree-file">${file.name}</span>`;
-            item.onclick = () => selectFile(item, file);
-            treeContainer.appendChild(item);
-        });
+    async function openWorkspacePath(relPath) {
+        if (!editor) return;
+        try {
+            const response = await fetch('/api/workspace/read', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ path: relPath })
+            });
+            const data = await response.json();
+            if (!response.ok) {
+                showToast(data.error || 'Could not open file', 'error');
+                return;
+            }
+            editor.setValue(data.content);
+            const base = relPath.split('/').pop();
+            const ext = base.includes('.') ? base.split('.').pop().toLowerCase() : '';
+            const lang = langMap[ext] || 'plaintext';
+            monaco.editor.setModelLanguage(editor.getModel(), lang);
+            document.getElementById('language-select').value = lang;
+            document.getElementById('current-filename').innerText = relPath;
+            currentFileName = base;
+            const tab = document.querySelector('.editor-tab.active .tab-name');
+            if (tab) tab.textContent = base;
+            showToast(`Opened ${relPath}`, 'success');
+        } catch (err) {
+            showToast(`Open failed: ${err.message}`, 'error');
+        }
     }
 
+    async function refreshWorkspaceTree() {
+        const treeContainer = document.getElementById('explorer-tree');
+        const appData = document.getElementById('app-data');
+        if (!treeContainer || !appData) return;
+
+        const fromPage = JSON.parse(appData.getAttribute('data-files') || '[]');
+        const byName = new Map();
+        fromPage.forEach(f => byName.set(String(f.name).replace(/\\/g, '/'), f));
+        uploadedFiles.forEach(f => byName.set(String(f.name).replace(/\\/g, '/'), f));
+        const inlineList = [...byName.values()];
+
+        try {
+            const r = await fetch('/api/workspace/tree?max=800');
+            const d = await r.json();
+            workspaceFileList = d.files || [];
+        } catch (e) {
+            workspaceFileList = [];
+        }
+
+        const inlinePaths = new Set(inlineList.map(f => String(f.name).replace(/\\/g, '/')));
+        const diskFiles = workspaceFileList.filter(f => !inlinePaths.has(f.path));
+
+        treeContainer.innerHTML = '';
+
+        if (inlineList.length) {
+            const lab = document.createElement('div');
+            lab.className = 'tree-section-label';
+            lab.textContent = 'Session / project';
+            treeContainer.appendChild(lab);
+            inlineList.forEach((file, index) => {
+                const ext = file.name.split('.').pop().toLowerCase();
+                const icon = fileIcons[ext] || fileIcons.default;
+                const item = document.createElement('div');
+                item.className = 'tree-item' + (index === 0 ? ' active' : '');
+                item.innerHTML = `<span class="tree-icon">${icon}</span><span class="tree-file">${file.name}</span>`;
+                item.onclick = () => selectFile(item, file);
+                treeContainer.appendChild(item);
+            });
+        }
+
+        if (diskFiles.length) {
+            const lab2 = document.createElement('div');
+            lab2.className = 'tree-section-label';
+            lab2.textContent = 'Workspace (disk)';
+            treeContainer.appendChild(lab2);
+            diskFiles.forEach(f => {
+                const base = f.path.split('/').pop();
+                const ext = base.includes('.') ? base.split('.').pop().toLowerCase() : '';
+                const icon = fileIcons[ext] || fileIcons.default;
+                const item = document.createElement('div');
+                item.className = 'tree-item';
+                item.innerHTML = `<span class="tree-icon">${icon}</span><span class="tree-file">${f.path}</span>`;
+                item.onclick = async () => {
+                    document.querySelectorAll('#explorer-tree .tree-item').forEach(i => i.classList.remove('active'));
+                    item.classList.add('active');
+                    await openWorkspacePath(f.path);
+                };
+                treeContainer.appendChild(item);
+            });
+        }
+
+        if (!inlineList.length && !diskFiles.length) {
+            treeContainer.innerHTML = `<div class="tree-item active"><span class="tree-icon">📄</span><span class="tree-file">${escapeHtml(currentFileName)}</span></div>`;
+        }
+    }
+    window.refreshWorkspaceTree = refreshWorkspaceTree;
+
     function selectFile(element, file) {
-        document.querySelectorAll('.tree-item').forEach(i => i.classList.remove('active'));
+        document.querySelectorAll('#explorer-tree .tree-item').forEach(i => i.classList.remove('active'));
         element.classList.add('active');
-        
+
         editor.setValue(file.content);
         const lang = langMap[file.name.split('.').pop().toLowerCase()] || 'plaintext';
         monaco.editor.setModelLanguage(editor.getModel(), lang);
         document.getElementById('language-select').value = lang;
         document.getElementById('current-filename').innerText = file.name;
         currentFileName = file.name;
+        const tab = document.querySelector('.editor-tab.active .tab-name');
+        if (tab) tab.textContent = file.name;
     }
 
     function addFileToTree(fileName, content, language) {
-        const treeContainer = document.getElementById('explorer-tree');
         const ext = fileName.split('.').pop().toLowerCase();
-        const icon = fileIcons[ext] || fileIcons.default;
-        
-        const item = document.createElement('div');
-        item.className = 'tree-item';
-        item.innerHTML = `<span class="tree-icon">${icon}</span><span class="tree-file">${fileName}</span>`;
-        
-        const file = { name: fileName, content, language };
-        item.onclick = () => selectFile(item, file);
-        
-        treeContainer.appendChild(item);
-        selectFile(item, file);
-        uploadedFiles.push(file);
+        const lang = language || langMap[ext] || 'plaintext';
+        uploadedFiles.push({ name: fileName, content, language: lang });
+        refreshWorkspaceTree().then(() => {
+            editor.setValue(content);
+            monaco.editor.setModelLanguage(editor.getModel(), lang);
+            document.getElementById('language-select').value = lang;
+            document.getElementById('current-filename').innerText = fileName;
+            currentFileName = fileName;
+            const tab = document.querySelector('.editor-tab.active .tab-name');
+            if (tab) tab.textContent = fileName;
+        });
+    }
+
+    async function loadAiSelectors() {
+        const modelSel = document.getElementById('ai-model-select');
+        const modeSel = document.getElementById('ai-mode-select');
+        if (!modelSel || !modeSel) return;
+        try {
+            const [mr, cr] = await Promise.all([
+                fetch('/api/models'),
+                fetch('/api/platform/capabilities')
+            ]);
+            const mj = await mr.json();
+            const cj = await cr.json();
+            const savedModel = localStorage.getItem('nexus-ai-model');
+            modelSel.innerHTML = '';
+            (mj.models || []).forEach(m => {
+                const o = document.createElement('option');
+                o.value = m.id;
+                o.textContent = m.name;
+                modelSel.appendChild(o);
+            });
+            if (savedModel && [...modelSel.options].some(o => o.value === savedModel)) {
+                modelSel.value = savedModel;
+            }
+            modeSel.innerHTML = '';
+            (cj.modes || []).forEach(m => {
+                const o = document.createElement('option');
+                o.value = m.id;
+                o.textContent = m.label;
+                o.title = m.description || '';
+                modeSel.appendChild(o);
+            });
+            modelSel.addEventListener('change', () => {
+                localStorage.setItem('nexus-ai-model', modelSel.value);
+            });
+        } catch (e) {
+            console.warn('AI selectors load failed', e);
+        }
+    }
+
+    async function runWorkspaceFind() {
+        const q = document.getElementById('find-workspace-input')?.value.trim() || '';
+        const out = document.getElementById('find-workspace-results');
+        const ov = document.getElementById('find-workspace-overlay');
+        if (!out) return;
+        if (q.length < 2) {
+            showToast('Type at least 2 characters', 'warning');
+            return;
+        }
+        out.innerHTML = '<div class="find-loading">Searching…</div>';
+        try {
+            const r = await fetch('/api/workspace/search', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ query: q, max_hits: 100 })
+            });
+            const d = await r.json();
+            if (!r.ok) {
+                out.innerHTML = `<div class="find-err">${escapeHtml(d.error || 'Search failed')}</div>`;
+                return;
+            }
+            if (!d.hits || !d.hits.length) {
+                out.innerHTML = '<div class="find-empty">No matches</div>';
+                return;
+            }
+            let html = '';
+            d.hits.forEach(h => {
+                const pe = encodeURIComponent(h.path);
+                html += `<div class="find-hit" data-path="${pe}" data-line="${h.line}"><span class="find-hit-path">${escapeHtml(h.path)}:${h.line}</span><pre>${escapeHtml(h.snippet)}</pre></div>`;
+            });
+            if (d.truncated) {
+                html += '<div class="find-truncated">Results truncated — refine your search.</div>';
+            }
+            out.innerHTML = html;
+            out.querySelectorAll('.find-hit').forEach(el => {
+                el.addEventListener('click', async () => {
+                    const path = decodeURIComponent(el.getAttribute('data-path') || '');
+                    const line = parseInt(el.getAttribute('data-line'), 10) || 1;
+                    await openWorkspacePath(path);
+                    ov?.classList.add('hidden');
+                    if (editor) {
+                        editor.revealLineInCenter(line);
+                        editor.setPosition({ lineNumber: line, column: 1 });
+                    }
+                });
+            });
+        } catch (err) {
+            out.innerHTML = `<div class="find-err">${escapeHtml(err.message)}</div>`;
+        }
+    }
+
+    function setupFindWorkspace() {
+        const ov = document.getElementById('find-workspace-overlay');
+        document.getElementById('find-workspace-btn')?.addEventListener('click', () => {
+            ov?.classList.remove('hidden');
+            document.getElementById('find-workspace-input')?.focus();
+        });
+        document.getElementById('close-find-workspace-btn')?.addEventListener('click', () => {
+            ov?.classList.add('hidden');
+        });
+        document.getElementById('refresh-workspace-btn')?.addEventListener('click', () => {
+            refreshWorkspaceTree();
+            showToast('Workspace refreshed', 'info');
+        });
+        document.getElementById('find-workspace-run')?.addEventListener('click', runWorkspaceFind);
+        document.getElementById('find-workspace-input')?.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') runWorkspaceFind();
+        });
+        ov?.addEventListener('click', (e) => {
+            if (e.target === ov) ov.classList.add('hidden');
+        });
     }
 
     // =====================================================
@@ -764,21 +1031,40 @@
             document.getElementById('fix-error-btn').classList.add('hidden');
         });
         
-        // Action Toolbar
+        setupFindWorkspace();
+
+        const actionModeMap = {
+            explain: 'explain', debug: 'debug', tests: 'tests', optimize: 'optimize',
+            document: 'document', refactor: 'refactor', review: 'review',
+            security: 'security', architecture: 'architecture', types: 'types', commit: 'commit'
+        };
+
+        // Action Toolbar — sets AI mode + focused prompt
         document.querySelectorAll('.action-toolbar .action-btn').forEach(btn => {
             btn.addEventListener('click', (e) => {
                 const action = e.target.getAttribute('data-action');
                 if (!action) return;
-                
+
+                const modeSel = document.getElementById('ai-mode-select');
+                if (modeSel && actionModeMap[action]) {
+                    modeSel.value = actionModeMap[action];
+                }
+
                 const code = editor.getValue();
                 const prompts = {
-                    'explain': `Explain this code in detail:\n\`\`\`\n${code}\n\`\`\``,
-                    'debug': `Find and explain any bugs or issues in this code:\n\`\`\`\n${code}\n\`\`\``,
-                    'tests': `Write comprehensive unit tests for this code:\n\`\`\`\n${code}\n\`\`\``,
-                    'optimize': `Optimize this code for better performance and readability:\n\`\`\`\n${code}\n\`\`\``,
-                    'document': `Add detailed documentation and comments to this code:\n\`\`\`\n${code}\n\`\`\``
+                    explain: `Explain this code in detail (intent, flow, edge cases):\n\`\`\`\n${code}\n\`\`\``,
+                    debug: `Find and explain bugs, failure modes, and concrete fixes for this code:\n\`\`\`\n${code}\n\`\`\``,
+                    tests: `Write comprehensive unit tests (with framework names and edge cases) for:\n\`\`\`\n${code}\n\`\`\``,
+                    optimize: `Optimize this code for performance and readability; note complexity trade-offs:\n\`\`\`\n${code}\n\`\`\``,
+                    document: `Add documentation (docstrings/comments) and a short usage example for:\n\`\`\`\n${code}\n\`\`\``,
+                    refactor: `Refactor for clarity and maintainability without changing behavior. Propose steps:\n\`\`\`\n${code}\n\`\`\``,
+                    review: `Perform a senior code review (correctness, APIs, errors, tests). Use severity tags:\n\`\`\`\n${code}\n\`\`\``,
+                    security: `Security review (injection, auth, secrets, OWASP-style risks) for:\n\`\`\`\n${code}\n\`\`\``,
+                    architecture: `Comment on architecture (boundaries, coupling, scaling, observability) for:\n\`\`\`\n${code}\n\`\`\``,
+                    types: `Improve static typing (types, generics, narrowing) for:\n\`\`\`\n${code}\n\`\`\``,
+                    commit: `Suggest a Conventional Commit message (and optional body) summarizing the intent of this code change:\n\`\`\`\n${code}\n\`\`\``
                 };
-                
+
                 if (prompts[action]) {
                     document.getElementById('user-input').value = prompts[action];
                     document.getElementById('chat-form').dispatchEvent(new Event('submit'));
@@ -806,6 +1092,12 @@
             if (e.ctrlKey && e.key === 'n') {
                 e.preventDefault();
                 document.getElementById('new-file-btn').click();
+            }
+            if (e.ctrlKey && e.shiftKey && e.key.toLowerCase() === 'f') {
+                e.preventDefault();
+                const fo = document.getElementById('find-workspace-overlay');
+                fo?.classList.remove('hidden');
+                document.getElementById('find-workspace-input')?.focus();
             }
         });
     }
@@ -906,6 +1198,7 @@
                         addFileToTree(file.name, file.content, lang);
                     });
                 }
+                refreshWorkspaceTree();
             } else {
                 throw new Error(data.error);
             }
@@ -933,8 +1226,8 @@
         logToTerminal(`▶ Running ${lang} code...`, 'info');
 
         // Handle stdin for input() calls
-        let stdinData = "";
-        if (code.includes('input(')) {
+        let stdinData = (document.getElementById('run-stdin-input')?.value || '').trim();
+        if (!stdinData && code.includes('input(')) {
             const userInput = prompt("This script requires input.\nEnter value(s) (one per line):");
             if (userInput === null) {
                 btn.disabled = false;
@@ -988,6 +1281,7 @@
             if (data.success) {
                 showToast(`Saved: ${fileName}`, 'success');
                 logToTerminal(`💾 Saved: workspace/${fileName}`, 'out');
+                refreshWorkspaceTree();
             } else {
                 throw new Error(data.error);
             }
@@ -1304,6 +1598,10 @@ if __name__ == '__main__':
 
         const formData = new FormData();
         formData.append('user_input', input);
+        const ms = document.getElementById('ai-model-select');
+        const md = document.getElementById('ai-mode-select');
+        if (ms && ms.value) formData.append('model', ms.value);
+        if (md && md.value) formData.append('ai_mode', md.value);
 
         try {
             const response = await fetch('/chat', { method: 'POST', body: formData });
@@ -1495,7 +1793,7 @@ if __name__ == '__main__':
             <span>Ctrl+Shift+P</span>
         </div>
         <div class="status-item">
-            <span>NexusAI v2.1</span>
+            <span>NexusAI v2.3</span>
         </div>
     </div>
 </div>

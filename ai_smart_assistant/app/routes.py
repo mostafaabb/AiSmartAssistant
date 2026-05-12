@@ -3,14 +3,18 @@ NexusAI Routes Module
 Defines all API endpoints and page routes for the NexusAI code assistant.
 
 Endpoints:
-    - GET  /              : Main editor page
-    - POST /chat          : AI chat with streaming response
-    - POST /run-code      : Execute code in various languages
-    - POST /upload        : Upload file or project (ZIP)
-    - POST /vision-analyze: Image-to-code conversion
-    - POST /github-clone  : Clone a GitHub repository
-    - GET  /health        : Health check endpoint
-    - Various /api/* endpoints for utilities
+    - GET  /                      : Main editor page
+    - POST /chat                  : AI chat (SSE); form: model, ai_mode
+    - POST /run-code              : Execute code
+    - POST /upload                : Upload file or ZIP project
+    - POST /vision-analyze        : Image-to-code
+    - POST /github-clone          : Clone allowed git hosts
+    - GET  /health                : Health check
+    - GET  /api/platform/capabilities : Modes + feature manifest
+    - GET  /api/workspace/tree    : List workspace files
+    - POST /api/workspace/read    : Open file from workspace
+    - POST /api/workspace/search  : Text search across workspace
+    - Various /api/* utilities (format, syntax, models, …)
 """
 
 import json
@@ -31,6 +35,17 @@ from flask import (
 )
 from werkzeug.utils import secure_filename
 
+from ai_smart_assistant.app.ai_prompts import (
+    build_system_prompt,
+    context_file_limit,
+    modes_for_api,
+    resolve_models,
+)
+from ai_smart_assistant.app.extensions import limiter
+from ai_smart_assistant.app.security_git import is_allowed_git_remote
+from ai_smart_assistant.app import user_state
+from ai_smart_assistant.app.workspace_fs import ensure_workspace, safe_join
+
 logger = logging.getLogger(__name__)
 
 main = Blueprint('main', __name__)
@@ -48,7 +63,6 @@ MAX_PROJECT_FILES = 50
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
-# Utility to collect project files in a repo/zip for context
 def collect_project_files(root_dir):
     project_files = []
     for root, dirs, files in os.walk(root_dir):
@@ -68,40 +82,25 @@ def collect_project_files(root_dir):
                     continue
     return project_files
 
-# Global state for single-user local environment
-# Replacing robust server-side session due to environment constraints
-GLOBAL_STATE = {
-    'history': [],
-    'code_context': None,
-    'last_execution_error': None
-}
-
 @main.route('/', methods=['GET'])
 def index():
     """Render the main NexusAI editor interface."""
+    payload = user_state.template_payload()
     return render_template(
         "index.html",
-        history=GLOBAL_STATE['history'],
-        code_context=GLOBAL_STATE['code_context']
+        history=payload["history"],
+        code_context=payload["code_context"],
     )
 
 
-# System prompt for better AI responses
-SYSTEM_PROMPT = """You are NexusAI, an expert AI programming assistant. You help developers write, debug, and understand code.
-
-Guidelines:
-- Be concise but thorough
-- Always provide working code examples when relevant
-- Explain your reasoning step by step
-- Use proper code formatting with language identifiers
-- When fixing bugs, explain what was wrong and why the fix works
-- Suggest best practices and optimizations when appropriate
-- If you're unsure, say so and provide alternatives
-
-Remember: You're helping a developer in an IDE, so prioritize practical, runnable code."""
+_SKIP_WORKSPACE_DIRS = frozenset({
+    ".git", "__pycache__", "node_modules", ".venv", "venv", "dist", "build",
+    "target", ".idea", ".pytest_cache", "eggs", ".mypy_cache",
+})
 
 
 @main.route('/chat', methods=['POST'])
+@limiter.limit("40 per minute")
 def chat():
     """Streaming AI chat endpoint.
 
@@ -111,6 +110,8 @@ def chat():
 
     Form Data:
         user_input (str): The user's message or question.
+        model (str, optional): Preferred OpenRouter model id.
+        ai_mode (str, optional): Assistant mode (general, explain, debug, ...).
 
     Returns:
         SSE stream with AI-generated content chunks.
@@ -119,27 +120,34 @@ def chat():
     if not prompt:
         return jsonify({"error": "No prompt provided"}), 400
 
-    context = GLOBAL_STATE.get('code_context')
-    last_error = GLOBAL_STATE.get('last_execution_error')
-    
+    ai_mode = (request.form.get('ai_mode') or 'general').strip().lower()
+    preferred_model = (request.form.get('model') or '').strip() or None
+    system_prompt_text = build_system_prompt(ai_mode)
+    ctx_limit = context_file_limit(ai_mode)
+
+    context, last_error = user_state.snapshot_for_chat()
+
     # Auto-Refine Logic: Inject last error if relevant
-    if last_error and any(k in prompt.lower() for k in ["fix", "error", "debug", "why", "help"]):
-        prompt = f"The terminal just reported this error:\n```\n{last_error}\n```\nTask: {prompt}"
-        GLOBAL_STATE['last_execution_error'] = None # Clear after use
+    if last_error and any(
+        k in prompt.lower() for k in ["fix", "error", "debug", "why", "help"]
+    ):
+        prompt = (
+            f"The terminal just reported this error:\n```\n{last_error}\n```\nTask: {prompt}"
+        )
+        user_state.clear_last_execution_error()
 
     full_prompt = prompt
     if context:
         if context['type'] == 'single':
             full_prompt = f"Context: File {context['name']}\n```{context['language']}\n{context['content']}\n```\n\nTask: {prompt}"
         else:
-            files = context['files'][:15] # Pruned context
+            files = context['files'][:ctx_limit] # Pruned context
             proj_ctx = f"Project: {context['name']}\n"
             for f in files:
                 proj_ctx += f"File: {f['name']}\n```{f['language']}\n{f['content']}\n```\n"
             full_prompt = f"{proj_ctx}\nTask: {prompt}"
 
-    GLOBAL_STATE['history'].append({"role": "user", "content": prompt})
-    # session.modified = True -- Not needed for in-memory global state
+    user_state.append_history_user(prompt)
 
     def generate():
         # Immediate UI Feedback
@@ -150,21 +158,16 @@ def chat():
             yield f"data: {json.dumps({'content': '⚠️ **Configuration Required**\n\nPlease set your `OPENROUTER_API_KEY` in the `.env` file.\n\n**Steps:**\n1. Get a free API key at [openrouter.ai/keys](https://openrouter.ai/keys)\n2. Open `.env` file in project root\n3. Replace `your_openrouter_api_key_here` with your key\n4. Restart the server'})}\n\n"
             return
 
+        app_url = current_app.config.get("APP_URL", "http://127.0.0.1:5000")
         url = "https://openrouter.ai/api/v1/chat/completions"
         headers = {
-            "Authorization": f"Bearer {api_key}", 
-            "HTTP-Referer": "http://localhost:5000",
+            "Authorization": f"Bearer {api_key}",
+            "HTTP-Referer": app_url,
             "X-Title": "NexusAI Code Assistant",
             "Content-Type": "application/json"
         }
         
-        # Models to try - using most reliable free models (ordered by quality)
-        models_to_try = [
-            "meta-llama/llama-3.3-70b-instruct:free",
-            "qwen/qwen3-coder:free",
-            "google/gemma-4-31b-it:free",
-            "liquid/lfm-2.5-1.2b-thinking:free"
-        ]
+        models_to_try = resolve_models(preferred_model)
         
         full_response = ""
         success = False
@@ -175,7 +178,7 @@ def chat():
                 data = {
                     "model": model,
                     "messages": [
-                        {"role": "system", "content": SYSTEM_PROMPT},
+                        {"role": "system", "content": system_prompt_text},
                         {"role": "user", "content": full_prompt}
                     ],
                     "stream": True,
@@ -223,8 +226,7 @@ def chat():
             debug_info = f"\n\nDEBUG INFO: {last_debug_msg}" if 'last_debug_msg' in locals() else ""
             yield f"data: {json.dumps({'content': f'\n\n⚠️ **Connection Error**\n\nUnable to reach AI models. Please check:\n1. Your internet connection\n2. Your API key is valid\n3. OpenRouter service status{debug_info}'})}\n\n"
         else:
-            # Save to history once done
-            GLOBAL_STATE['history'].append({"role": "assistant", "content": full_response})
+            user_state.append_history_assistant(full_response)
 
     return Response(stream_with_context(generate()), mimetype='text/event-stream')
 
@@ -462,20 +464,136 @@ def syntax_check():
 
 @main.route('/api/models', methods=['GET'])
 def list_models():
-    """List available AI models"""
+    """List AI models selectable in the IDE (OpenRouter)."""
     models = [
-        {"id": "meta-llama/llama-3.3-70b-instruct:free", "name": "Llama 3.3 70B", "description": "Powerful general purpose model"},
-        {"id": "qwen/qwen3-coder:free", "name": "Qwen 3 Coder", "description": "Specialized for code generation"},
-        {"id": "google/gemma-4-31b-it:free", "name": "Gemma 4 31B", "description": "Latest Google open model"},
-        {"id": "liquid/lfm-2.5-1.2b-thinking:free", "name": "Liquid Thinking", "description": "Reasoning focused model"}
+        {"id": "meta-llama/llama-3.3-70b-instruct:free", "name": "Llama 3.3 70B", "description": "Strong general-purpose model"},
+        {"id": "qwen/qwen3-coder:free", "name": "Qwen 3 Coder", "description": "Code generation & refactoring"},
+        {"id": "google/gemma-4-31b-it:free", "name": "Gemma 4 31B", "description": "Google open-weight instruct"},
+        {"id": "liquid/lfm-2.5-1.2b-thinking:free", "name": "Liquid LFM 2.5", "description": "Lightweight reasoning"},
+        {"id": "deepseek/deepseek-chat-v3-0324:free", "name": "DeepSeek V3", "description": "General coding & reasoning"},
+        {"id": "mistralai/mistral-7b-instruct:free", "name": "Mistral 7B Instruct", "description": "Fast instruct model"},
     ]
     return jsonify({"models": models})
+
+
+@main.route('/api/platform/capabilities', methods=['GET'])
+def platform_capabilities():
+    """Feature manifest for the client (modes, models, workspace)."""
+    return jsonify({
+        "version": "2.2.0",
+        "modes": modes_for_api(),
+        "workspace": {"max_tree_files": 800, "max_search_hits": 120},
+    })
+
+
+@main.route('/api/workspace/tree', methods=['GET'])
+@limiter.limit("60 per minute")
+def workspace_tree():
+    """List files under workspace/ for the explorer."""
+    root = ensure_workspace()
+    max_files = min(int(request.args.get('max', 600)), 2000)
+    files_out = []
+    truncated = False
+    for dirpath, dirnames, filenames in os.walk(root):
+        dirnames[:] = [d for d in dirnames if d not in _SKIP_WORKSPACE_DIRS]
+        for name in filenames:
+            if len(files_out) >= max_files:
+                truncated = True
+                break
+            abs_path = os.path.join(dirpath, name)
+            try:
+                sz = os.path.getsize(abs_path)
+            except OSError:
+                continue
+            if sz > 2 * 1024 * 1024:
+                continue
+            rel = os.path.relpath(abs_path, root).replace("\\", "/")
+            if rel.startswith(".."):
+                continue
+            files_out.append({"path": rel, "size": sz})
+        if truncated:
+            break
+    return jsonify({"files": files_out, "truncated": truncated})
+
+
+@main.route('/api/workspace/read', methods=['POST'])
+@limiter.limit("120 per minute")
+def workspace_read():
+    """Read a UTF-8 text file from workspace."""
+    data = request.get_json(silent=True) or {}
+    rel = (data.get('path') or '').replace("\\", "/")
+    path = safe_join(rel)
+    if not path or not os.path.isfile(path):
+        return jsonify({"error": "File not found"}), 404
+    try:
+        with open(path, 'r', encoding='utf-8', errors='replace') as f:
+            content = f.read()
+    except OSError as e:
+        return jsonify({"error": str(e)}), 500
+    if len(content) > 1_200_000:
+        return jsonify({"error": "File too large to open in the editor"}), 413
+    return jsonify({"path": rel, "content": content})
+
+
+@main.route('/api/workspace/search', methods=['POST'])
+@limiter.limit("30 per minute")
+def workspace_search():
+    """Search for a substring across text files in workspace."""
+    data = request.get_json(silent=True) or {}
+    q = (data.get('query') or '').strip()
+    if len(q) < 2:
+        return jsonify({"error": "Query must be at least 2 characters"}), 400
+    max_hits = min(int(data.get('max_hits', 100)), 400)
+    root = ensure_workspace()
+    ql = q.lower()
+    hits = []
+    scanned = 0
+
+    for dirpath, dirnames, filenames in os.walk(root):
+        dirnames[:] = [d for d in dirnames if d not in _SKIP_WORKSPACE_DIRS]
+        for name in filenames:
+            if len(hits) >= max_hits:
+                return jsonify({
+                    "hits": hits,
+                    "truncated": True,
+                    "scanned_files": scanned,
+                })
+            abs_path = os.path.join(dirpath, name)
+            rel = os.path.relpath(abs_path, root).replace("\\", "/")
+            if rel.startswith(".."):
+                continue
+            try:
+                sz = os.path.getsize(abs_path)
+            except OSError:
+                continue
+            if sz > 800_000:
+                continue
+            try:
+                with open(abs_path, 'rb') as bf:
+                    raw = bf.read(400_000)
+                if b'\0' in raw[:8000]:
+                    continue
+                text = raw.decode('utf-8', errors='replace')
+            except OSError:
+                continue
+            scanned += 1
+            for i, line in enumerate(text.splitlines(), start=1):
+                if ql in line.lower():
+                    hits.append({
+                        "path": rel,
+                        "line": i,
+                        "snippet": line.strip()[:500],
+                    })
+                    if len(hits) >= max_hits:
+                        break
+
+    return jsonify({"hits": hits, "truncated": False, "scanned_files": scanned})
 
 
 @main.route('/api/context', methods=['GET'])
 def get_context():
     """Get current code context info"""
-    context = GLOBAL_STATE.get('code_context')
+    context = user_state.get_code_context()
     if not context:
         return jsonify({"has_context": False})
     
@@ -537,11 +655,11 @@ def upload_file():
                             })
                         except: continue
                 
-                GLOBAL_STATE['code_context'] = {
+                user_state.set_code_context({
                     "type": "project",
                     "name": filename,
                     "files": project_files[:50] # Limit to 50 files for session/prompt safety
-                }
+                })
                 return jsonify({"success": True, "name": filename, "type": "project", "count": len(project_files)})
             except Exception as e:
                 return jsonify({"error": f"Failed to process ZIP: {str(e)}"}), 500
@@ -549,39 +667,52 @@ def upload_file():
             # Handle single file
             content = file.read().decode('utf-8', errors='ignore')
             language = filename.rsplit('.', 1)[1].lower() if '.' in filename else 'txt'
-            GLOBAL_STATE['code_context'] = {
+            user_state.set_code_context({
                 "type": "single",
                 "name": filename,
                 "content": content,
                 "language": language
-            }
+            })
             return jsonify({"success": True, "name": filename, "type": "single"})
             
     return jsonify({"error": "File type not allowed"}), 400
 
 def _clone_repository(repo_url):
     import subprocess
+    if len(repo_url) > 2048:
+        raise ValueError("Repository URL is too long")
     safe_name = secure_filename(repo_url.split('/')[-1] or 'repo')
     target_dir = os.path.join(os.getcwd(), 'workspace', 'repo_' + safe_name)
 
     os.makedirs(os.path.join(os.getcwd(), 'workspace'), exist_ok=True)
-    subprocess.run(["git", "clone", repo_url, target_dir], check=True)
+    subprocess.run(
+        ["git", "clone", "--depth", "1", repo_url, target_dir],
+        check=True,
+        timeout=600,
+        capture_output=True,
+        text=True,
+    )
 
     project_files = collect_project_files(target_dir)
-    GLOBAL_STATE['code_context'] = {
+    user_state.set_code_context({
         "type": "project",
         "name": safe_name,
         "files": project_files[:50]
-    }
+    })
     return target_dir, project_files
 
 @main.route('/github-clone', methods=['POST'])
 @main.route('/clone-repo', methods=['POST'])
+@limiter.limit("10 per minute")
 def github_clone():
     data = request.get_json(silent=True) or {}
     repo_url = data.get('url') or data.get('repo_url')
     if not repo_url:
         return jsonify({"error": "No URL provided"}), 400
+
+    allowed = current_app.config.get("GIT_ALLOWED_HOSTS") or frozenset()
+    if not is_allowed_git_remote(repo_url, allowed):
+        return jsonify({"error": "Git host is not allowed for cloning"}), 400
 
     try:
         target_dir, project_files = _clone_repository(repo_url)
@@ -591,12 +722,16 @@ def github_clone():
             "files": project_files[:50]
         })
     except subprocess.CalledProcessError as e:
-        return jsonify({"error": f"Git clone failed: {e}"}), 500
+        detail = (e.stderr or e.stdout or str(e))[:2000]
+        return jsonify({"error": f"Git clone failed: {detail}"}), 500
+    except subprocess.TimeoutExpired:
+        return jsonify({"error": "Git clone timed out"}), 504
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
 @main.route('/vision-analyze', methods=['POST'])
 @main.route('/vision-to-code', methods=['POST'])
+@limiter.limit("15 per minute")
 def vision_analyze():
     import base64
 
@@ -673,15 +808,16 @@ def write_to_disk():
 def sync_editor():
     data = request.json
     content = data.get('content')
-    context = GLOBAL_STATE.get('code_context')
+    context = user_state.get_code_context()
     if context and content:
         if context['type'] == 'single':
             context['content'] = content
-            # GLOBAL_STATE['code_context'] is already updated by reference if mutable, but explicit is safe
+            user_state.set_code_context(context)
             return jsonify({"success": True})
     return jsonify({"success": False}), 400
 
 @main.route('/run-code', methods=['POST'])
+@limiter.limit("30 per minute")
 def run_code():
     """Execute code in a sandboxed environment.
 
@@ -794,7 +930,7 @@ def run_code():
                 result = subprocess.run(compile_cmd, capture_output=True, text=True, timeout=30)
                 if result.returncode != 0:
                     error_msg = result.stderr or "Compilation failed"
-                    GLOBAL_STATE['last_execution_error'] = error_msg
+                    user_state.set_last_execution_error(error_msg)
                     return jsonify({"error": f"❌ Java Compilation Error:\n{error_msg}"}), 400
                 
                 # Run compiled Java
@@ -810,7 +946,7 @@ def run_code():
                 result = subprocess.run(compile_cmd, capture_output=True, text=True, timeout=30)
                 if result.returncode != 0:
                     error_msg = result.stderr or "Compilation failed"
-                    GLOBAL_STATE['last_execution_error'] = error_msg
+                    user_state.set_last_execution_error(error_msg)
                     return jsonify({"error": f"❌ {compiler.upper()} Compilation Error:\n{error_msg}"}), 400
                 
                 # Run compiled executable
@@ -823,7 +959,7 @@ def run_code():
                 result = subprocess.run(compile_cmd, capture_output=True, text=True, timeout=60)
                 if result.returncode != 0:
                     error_msg = result.stderr or "Compilation failed"
-                    GLOBAL_STATE['last_execution_error'] = error_msg
+                    user_state.set_last_execution_error(error_msg)
                     return jsonify({"error": f"❌ Rust Compilation Error:\n{error_msg}"}), 400
                 
                 # Run compiled executable
@@ -836,7 +972,7 @@ def run_code():
                 result = subprocess.run(compile_cmd, capture_output=True, text=True, timeout=30)
                 if result.returncode != 0:
                     error_msg = result.stderr or "Compilation failed"
-                    GLOBAL_STATE['last_execution_error'] = error_msg
+                    user_state.set_last_execution_error(error_msg)
                     return jsonify({"error": f"❌ C# Compilation Error:\n{error_msg}"}), 400
                 
                 # Run compiled executable
@@ -860,7 +996,7 @@ def run_code():
         error = result.stderr
         
         if error:
-            GLOBAL_STATE['last_execution_error'] = error
+            user_state.set_last_execution_error(error)
 
         return jsonify({
             "output": output if output else ("" if error else "✅ Code executed successfully (no output)"),
@@ -902,16 +1038,14 @@ def run_code():
 
 @main.route('/clear-context')
 def clear_context():
-    GLOBAL_STATE['code_context'] = None
+    user_state.clear_code_context()
     if request.headers.get('Accept') == 'application/json':
         return jsonify({"success": True})
     return redirect(url_for('main.index'))
 
 @main.route('/clear')
 def clear_history():
-    GLOBAL_STATE['history'] = []
-    GLOBAL_STATE['code_context'] = None
-    GLOBAL_STATE['last_execution_error'] = None
+    user_state.clear_all()
     if request.headers.get('Accept') == 'application/json':
         return jsonify({"success": True})
     return redirect(url_for('main.index'))
@@ -919,12 +1053,16 @@ def clear_history():
 
 # Health check endpoint
 @main.route('/health')
+@limiter.exempt
 def health_check():
+    if current_app.config.get('ENV') == 'production':
+        return jsonify({"status": "ok"})
+    hc, ctx = user_state.health_metrics_for_session()
     return jsonify({
         "status": "ok",
         "has_api_key": bool(current_app.config.get('OPENROUTER_API_KEY')),
-        "history_count": len(GLOBAL_STATE['history']),
-        "has_context": GLOBAL_STATE['code_context'] is not None
+        "history_count": hc,
+        "has_context": ctx,
     })
 
 
@@ -1006,7 +1144,7 @@ def get_templates():
 @main.route('/api/export-chat', methods=['GET'])
 def export_chat():
     """Export chat history"""
-    history = GLOBAL_STATE['history']
+    history = user_state.get_history_copy()
     format_type = request.args.get('format', 'json')
     
     if format_type == 'markdown':
@@ -1041,7 +1179,7 @@ def manage_session():
             "code": data.get('code', ''),
             "language": data.get('language', 'python'),
             "filename": data.get('filename', 'untitled.py'),
-            "history": GLOBAL_STATE['history'],
+            "history": user_state.get_history_copy(),
             "savedAt": datetime.now().isoformat()
         }
         

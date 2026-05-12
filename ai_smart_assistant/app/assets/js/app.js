@@ -550,12 +550,20 @@ const CommandPalette = {
         { id: 'refactorCode', name: 'Refactor Code', icon: '🔄', group: 'AI' },
         { id: 'findBugs', name: 'Find Bugs', icon: '🐛', group: 'AI' },
         { id: 'improvePerformance', name: 'Improve Performance', icon: '🚀', group: 'AI' },
+        { id: 'securityReview', name: 'Security Review', icon: '🔐', group: 'AI' },
+        { id: 'architectureReview', name: 'Architecture Review', icon: '🏛️', group: 'AI' },
+        { id: 'findInWorkspace', name: 'Find in Workspace', icon: '🔎', shortcut: 'Ctrl+Shift+F', group: 'Workspace' },
+        { id: 'refreshWorkspace', name: 'Refresh Workspace Tree', icon: '🔄', group: 'Workspace' },
         { id: 'toggleTheme', name: 'Toggle Theme', icon: '🌓', group: 'View' },
         { id: 'openSettings', name: 'Open Settings', icon: '⚙️', group: 'View' },
         { id: 'showShortcuts', name: 'Keyboard Shortcuts', icon: '⌨️', group: 'View' },
         { id: 'showMetrics', name: 'Code Metrics', icon: '📊', group: 'View' },
         { id: 'saveSnippet', name: 'Save as Snippet', icon: '📌', group: 'Snippets' },
         { id: 'browseSnippets', name: 'Browse Snippets', icon: '📚', group: 'Snippets' },
+        { id: 'toggleExplorerPanel', name: 'Toggle Explorer', icon: '📁', shortcut: 'Ctrl+Shift+B', group: 'View' },
+        { id: 'toggleChatPanel', name: 'Toggle AI Chat', icon: '💬', shortcut: 'Ctrl+Shift+J', group: 'View' },
+        { id: 'focusMode', name: 'Focus Mode (hide side panels)', icon: '⛶', shortcut: 'Ctrl+Shift+M', group: 'View' },
+        { id: 'copySelectionToChat', name: 'Insert Selection into Chat', icon: '📎', group: 'AI' },
         { id: 'togglePreview', name: 'Toggle Live Preview', icon: '👁️', group: 'View' },
     ],
     
@@ -708,6 +716,21 @@ const CommandPalette = {
             debugCode: () => CommandPalette.triggerAIAction('Find bugs and issues in this code'),
             generateTests: () => CommandPalette.triggerAIAction('Generate unit tests for this code'),
             optimizeCode: () => CommandPalette.triggerAIAction('Optimize this code for better performance'),
+            refactorCode: () => CommandPalette.triggerAIWithMode('refactor', 'Refactor this code for clarity and maintainability without changing behavior.'),
+            findBugs: () => CommandPalette.triggerAIWithMode('debug', 'Find bugs and failure modes in this code.'),
+            improvePerformance: () => CommandPalette.triggerAIWithMode('optimize', 'Improve performance and memory usage of this code; note trade-offs.'),
+            securityReview: () => CommandPalette.triggerAIWithMode('security', 'Perform a security review of this code (injection, auth, secrets, OWASP-style).'),
+            architectureReview: () => CommandPalette.triggerAIWithMode('architecture', 'Review architecture, boundaries, and scalability of this code.'),
+            findInWorkspace: () => {
+                document.getElementById('find-workspace-overlay')?.classList.remove('hidden');
+                document.getElementById('find-workspace-input')?.focus();
+            },
+            refreshWorkspace: () => {
+                if (typeof window.refreshWorkspaceTree === 'function') {
+                    window.refreshWorkspaceTree();
+                    Toast.info('Workspace tree refreshed');
+                }
+            },
             toggleTheme: () => {
                 const newTheme = NexusAI.settings.theme === 'dark' ? 'light' : 'dark';
                 Settings.applyTheme(newTheme);
@@ -719,6 +742,10 @@ const CommandPalette = {
             saveSnippet: () => SnippetManager.showSaveModal(),
             browseSnippets: () => SnippetManager.show(),
             togglePreview: () => LivePreview.toggle(),
+            toggleExplorerPanel: () => document.getElementById('toggle-explorer-btn')?.click(),
+            toggleChatPanel: () => document.getElementById('toggle-chat-btn')?.click(),
+            focusMode: () => document.getElementById('focus-mode-btn')?.click(),
+            copySelectionToChat: () => document.getElementById('copy-selection-chat-btn')?.click(),
         };
         
         handlers[commandId]?.();
@@ -730,6 +757,14 @@ const CommandPalette = {
             input.value = prompt;
             document.getElementById('chat-form')?.dispatchEvent(new Event('submit'));
         }
+    },
+
+    triggerAIWithMode: (mode, instruction) => {
+        const modeSel = document.getElementById('ai-mode-select');
+        if (modeSel && mode) modeSel.value = mode;
+        const ed = EditorManager.getValue();
+        const block = ed ? `\n\`\`\`\n${ed}\n\`\`\`` : '';
+        CommandPalette.triggerAIAction(`${instruction}${block}`);
     }
 };
 
@@ -1032,8 +1067,7 @@ document.addEventListener('DOMContentLoaded', () => {
     CodeMetrics.init();
     SnippetManager.init();
     LivePreview.init();
-    
-    // Register default shortcuts
+    LayoutResize.init();
     Shortcuts.register('ctrl+s', 'Save/Download code', () => {
         const code = EditorManager.getValue();
         Utils.downloadFile(code, NexusAI.state.currentFile || 'code.txt');
@@ -1065,6 +1099,7 @@ document.addEventListener('DOMContentLoaded', () => {
             LivePreview.hide();
             document.getElementById('shortcuts-overlay')?.classList.add('hidden');
             document.getElementById('settings-overlay')?.classList.add('hidden');
+            document.getElementById('find-workspace-overlay')?.classList.add('hidden');
         }
     });
     

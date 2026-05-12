@@ -58,7 +58,7 @@
         </div>
     </div>
 
-    <div class="ide-wrapper">
+    <div class="ide-wrapper" id="ide-layout">
         {% block content %}{% endblock %}
     </div>
 
@@ -101,6 +101,7 @@
     <!-- Application JavaScript -->
     <script src="{{ url_for('static', filename='js/templates.js') }}"></script>
     <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/layout-resize.js') }}"></script>
 </body>
 
 </html>

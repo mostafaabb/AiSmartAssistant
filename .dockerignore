@@ -1,0 +1,13 @@
+venv
+.venv
+__pycache__
+*.pyc
+.git
+.env
+workspace
+flask_session
+.pytest_cache
+*.log
+backend
+.idea
+.vscode

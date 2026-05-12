@@ -13,8 +13,14 @@ import logging
 import time
 from datetime import datetime
 
+from sqlalchemy import text
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+
 from backend.app.core import settings
-from backend.app.core.database import init_db, close_db
+from backend.app.core.database import init_db, close_db, engine
+from backend.app.core.rate_limit import limiter
+from backend.app.services.redis_client import close_redis, init_redis
 
 # Configure logging
 logging.basicConfig(
@@ -22,6 +28,15 @@ logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 )
 logger = logging.getLogger(__name__)
+
+if settings.sentry_dsn:
+    import sentry_sdk
+
+    sentry_sdk.init(
+        dsn=settings.sentry_dsn,
+        environment=settings.environment,
+        traces_sample_rate=0.05,
+    )
 
 
 @asynccontextmanager
@@ -39,11 +54,14 @@ async def lifespan(app: FastAPI):
         logger.error(f"❌ Failed to initialize database: {e}")
         raise
 
+    await init_redis()
+
     yield
 
     # Shutdown
     logger.info("⚙️  NexusAI Backend Shutdown")
     try:
+        await close_redis()
         await close_db()
         logger.info("✅ Database connection closed")
     except Exception as e:
@@ -58,6 +76,9 @@ app = FastAPI(
     lifespan=lifespan,
     debug=settings.debug,
 )
+
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 
 # ======================== MIDDLEWARE ========================
@@ -158,6 +179,39 @@ async def health_check():
     }
 
 
+@app.get("/health/live")
+async def health_live():
+    """Liveness probe: process is up (use for load balancers / orchestrators)."""
+    return {
+        "status": "alive",
+        "timestamp": datetime.utcnow().isoformat(),
+    }
+
+
+@app.get("/health/ready")
+async def health_ready():
+    """Readiness probe: verify database connectivity before receiving traffic."""
+    try:
+        async with engine.connect() as conn:
+            await conn.execute(text("SELECT 1"))
+        return {
+            "status": "ready",
+            "database": "connected",
+            "timestamp": datetime.utcnow().isoformat(),
+        }
+    except Exception as e:
+        logger.warning("Readiness check failed: %s", e)
+        return JSONResponse(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            content={
+                "status": "not_ready",
+                "database": "disconnected",
+                "detail": str(e) if settings.debug else "Database unavailable",
+                "timestamp": datetime.utcnow().isoformat(),
+            },
+        )
+
+
 @app.get("/docs-json")
 async def get_openapi():
     """Get OpenAPI schema."""
@@ -167,11 +221,29 @@ async def get_openapi():
 # ======================== INCLUDE ROUTERS ========================
 
 # Import all API v2 routers
-from backend.app.api.v2 import auth, projects, files, code_execution, session, chat, websocket, organizations, git
+from backend.app.api.v2 import (
+    api_keys,
+    audit_logs,
+    auth,
+    chat,
+    code_execution,
+    files,
+    git,
+    organizations,
+    projects,
+    session,
+    usage_metrics,
+    webhooks,
+    websocket,
+)
 
 # Include routers
 app.include_router(auth.router)
 app.include_router(organizations.router)
+app.include_router(webhooks.router)
+app.include_router(api_keys.router)
+app.include_router(audit_logs.router)
+app.include_router(usage_metrics.router)
 app.include_router(projects.router)
 app.include_router(files.router)
 app.include_router(git.router)
@@ -181,6 +253,47 @@ app.include_router(chat.router)
 app.include_router(websocket.router)
 
 logger.info("✅ API v2 routers registered successfully")
+
+
+@app.get("/")
+async def api_developer_index():
+    """
+    API discovery for developers: links to docs, health, and the versioned API surface.
+    """
+    return {
+        "name": settings.app_name,
+        "version": settings.app_version,
+        "environment": settings.environment,
+        "documentation": {
+            "swagger_ui": "/docs",
+            "redoc": "/redoc",
+            "openapi_json": "/openapi.json",
+        },
+        "health": {
+            "summary": "/health",
+            "liveness": "/health/live",
+            "readiness": "/health/ready",
+        },
+        "api": {
+            "version": "v2",
+            "base_path": "/api/v2",
+            "capabilities": [
+                "authentication",
+                "organizations",
+                "webhooks",
+                "api_keys",
+                "audit_logs",
+                "usage_metrics",
+                "projects",
+                "files",
+                "git",
+                "code_execution",
+                "session",
+                "chat",
+                "websocket",
+            ],
+        },
+    }
 
 
 # ======================== STATIC FILES ========================
@@ -214,7 +327,7 @@ async def startup_event():
     🔌 Services:
        • FastAPI running
        • Database: Initializing...
-       • Authentication: JWT + OAuth2 configured
+       • Authentication: JWT + API keys (Bearer / X-API-Key)
 
     📝 Documentation:
        • OpenAPI: http://localhost:8000/docs

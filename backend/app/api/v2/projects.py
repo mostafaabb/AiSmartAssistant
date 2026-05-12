@@ -3,7 +3,7 @@ Project management routes for NexusAI API.
 Handles project CRUD operations and member management.
 """
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from uuid import UUID
@@ -18,6 +18,9 @@ from backend.app.schemas import (
     ProjectResponse,
 )
 
+from backend.app.services.audit_service import write_audit
+from backend.app.services.webhook_dispatcher import deliver_organization_event
+
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v2/projects", tags=["Projects"])
 
@@ -25,7 +28,9 @@ router = APIRouter(prefix="/api/v2/projects", tags=["Projects"])
 @router.post("", response_model=ProjectResponse, status_code=status.HTTP_201_CREATED)
 async def create_project(
     org_id: UUID,
-    request: ProjectCreateRequest,
+    payload: ProjectCreateRequest,
+    background_tasks: BackgroundTasks,
+    request: Request,
     current_user_id: str = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
@@ -82,9 +87,9 @@ async def create_project(
     # Create project
     project = Project(
         organization_id=org_id,
-        name=request.name,
-        description=request.description,
-        git_url=request.git_url,
+        name=payload.name,
+        description=payload.description,
+        git_url=payload.git_url,
         created_by_id=current_user_id,
     )
 
@@ -93,6 +98,26 @@ async def create_project(
     await db.refresh(project)
 
     logger.info(f"✅ Project created: {project.id} ({project.name})")
+
+    background_tasks.add_task(
+        write_audit,
+        user_id=UUID(current_user_id),
+        action="project.create",
+        resource_type="project",
+        resource_id=str(project.id),
+        details={"name": project.name, "organization_id": str(org_id)},
+        request=request,
+    )
+    background_tasks.add_task(
+        deliver_organization_event,
+        org_id,
+        "project.created",
+        {
+            "project_id": str(project.id),
+            "name": project.name,
+            "organization_id": str(org_id),
+        },
+    )
 
     return ProjectResponse.from_orm(project)
 

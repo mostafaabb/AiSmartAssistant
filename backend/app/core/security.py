@@ -1,15 +1,18 @@
 """
 Security & Authentication module for NexusAI.
-Implements JWT + OAuth2 authentication with password hashing.
+Implements JWT + HTTP Bearer + optional X-API-Key for programmatic access.
 """
 
 from datetime import datetime, timedelta
 from typing import Optional, Dict, Any
 from jose import JWTError, jwt
 from passlib.context import CryptContext
-from fastapi import Depends, HTTPException, status
-from fastapi.security import OAuth2PasswordBearer
+from fastapi import Depends, HTTPException, status, Header
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from sqlalchemy.ext.asyncio import AsyncSession
 import os
+
+from backend.app.core.database import get_db
 
 # Password hashing
 pwd_context = CryptContext(
@@ -18,8 +21,7 @@ pwd_context = CryptContext(
     bcrypt__rounds=12
 )
 
-# OAuth2 scheme
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
+http_bearer = HTTPBearer(auto_error=False)
 
 # JWT Configuration
 SECRET_KEY = os.getenv("SECRET_KEY", "your-secret-key-change-in-production-" + os.urandom(32).hex())
@@ -97,46 +99,56 @@ def verify_token(token: str) -> Dict[str, Any]:
         )
 
 
-async def get_current_user(token: str = Depends(oauth2_scheme)) -> str:
+async def get_current_user(
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(http_bearer),
+    x_api_key: Optional[str] = Header(default=None, alias="X-API-Key"),
+    db: AsyncSession = Depends(get_db),
+) -> str:
     """
-    Dependency to get current user from JWT token.
-
-    Usage in routes:
-        @app.get("/profile/")
-        async def get_profile(current_user: str = Depends(get_current_user)):
-            return {"user_id": current_user}
-
-    Returns:
-        User ID string
-
-    Raises:
-        HTTPException: If token is invalid
+    Resolve the current user from JWT (Authorization: Bearer) or from an API key
+    (X-API-Key header, or Bearer with a non-JWT secret).
     """
-    payload = verify_token(token)
-    user_id: str = payload.get("sub")
+    from backend.app.services.api_key_service import validate_api_key
 
-    if user_id is None:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Could not validate credentials",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
+    if credentials and credentials.scheme and credentials.scheme.lower() == "bearer":
+        token = credentials.credentials
+        if token.count(".") == 2:
+            try:
+                payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+                sub = payload.get("sub")
+                if sub:
+                    return sub
+            except JWTError:
+                pass
+        user_id = await validate_api_key(db, token)
+        if user_id:
+            return user_id
 
-    return user_id
+    if x_api_key:
+        user_id = await validate_api_key(db, x_api_key)
+        if user_id:
+            return user_id
+
+    raise HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Not authenticated",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
 
 
-async def get_optional_user(token: Optional[str] = Depends(oauth2_scheme)) -> Optional[str]:
+async def get_optional_user(
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(http_bearer),
+) -> Optional[str]:
     """
-    Optional dependency for routes that work both authenticated and unauthenticated.
-
-    Returns:
-        User ID if authenticated, None otherwise
+    Optional JWT-only user id (no API key lookup, no DB).
     """
-    if token is None:
+    if not credentials or not credentials.scheme or credentials.scheme.lower() != "bearer":
         return None
-
+    token = credentials.credentials
+    if not token or token.count(".") != 2:
+        return None
     try:
-        payload = verify_token(token)
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         return payload.get("sub")
-    except HTTPException:
+    except JWTError:
         return None

@@ -31,6 +31,9 @@ class Settings(BaseSettings):
     database_url: str = "postgresql+asyncpg://postgres:postgres@localhost:5432/nexusai"
     sql_echo: bool = False
 
+    # Redis (rate limits, API key cache, metrics)
+    redis_url: Optional[str] = None
+
     # Security
     secret_key: str = os.urandom(32).hex()
     algorithm: str = "HS256"
@@ -40,6 +43,8 @@ class Settings(BaseSettings):
     # CORS
     cors_origins: list = [
         "http://localhost:3000",
+        "http://localhost:5000",  # Flask IDE (python run.py)
+        "http://127.0.0.1:5000",
         "http://localhost:5173",  # Vite
         "http://localhost:8080",
         "http://127.0.0.1:3000",

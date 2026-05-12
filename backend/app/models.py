@@ -41,6 +41,7 @@ class User(Base):
     file_versions = relationship("FileVersion", back_populates="created_by_user")
     sessions = relationship("Session", back_populates="user")
     audit_logs = relationship("AuditLog", back_populates="user")
+    api_keys = relationship("ApiKey", back_populates="user", cascade="all, delete-orphan")
 
     __table_args__ = (
         UniqueConstraint('email', name='uq_user_email'),
@@ -67,6 +68,7 @@ class Organization(Base):
     owner = relationship("User", back_populates="organizations", foreign_keys=[owner_id])
     members = relationship("OrganizationMember", back_populates="organization", cascade="all, delete-orphan")
     projects = relationship("Project", back_populates="organization", cascade="all, delete-orphan")
+    webhooks = relationship("Webhook", back_populates="organization", cascade="all, delete-orphan")
 
 
 class OrganizationMember(Base):
@@ -276,4 +278,55 @@ class Secret(Base):
     __table_args__ = (
         UniqueConstraint('user_id', 'name', name='uq_user_secret_name'),
         Index('idx_user_id', 'user_id'),
+    )
+
+
+class ApiKey(Base):
+    """Programmatic API access (CI, scripts, integrations). Full key is shown only once at creation."""
+
+    __tablename__ = "api_keys"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
+    organization_id = Column(UUID(as_uuid=True), ForeignKey("organizations.id"), nullable=True)
+    name = Column(String(120), nullable=False)
+    key_hash = Column(String(128), nullable=False, unique=True, index=True)
+    prefix_display = Column(String(32), nullable=False)
+    scopes = Column(JSON, default=list, nullable=False)
+    created_at = Column(TIMESTAMP(timezone=True), server_default=func.now(), nullable=False)
+    expires_at = Column(TIMESTAMP(timezone=True), nullable=True)
+    revoked_at = Column(TIMESTAMP(timezone=True), nullable=True)
+    last_used_at = Column(TIMESTAMP(timezone=True), nullable=True)
+
+    user = relationship("User", back_populates="api_keys")
+    organization = relationship("Organization", foreign_keys=[organization_id])
+
+    __table_args__ = (
+        Index("idx_api_keys_user_id", "user_id"),
+        Index("idx_api_keys_org_id", "organization_id"),
+    )
+
+
+class Webhook(Base):
+    """Outbound HTTPS notifications for organization events (HMAC-signed payloads)."""
+
+    __tablename__ = "webhooks"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    organization_id = Column(UUID(as_uuid=True), ForeignKey("organizations.id"), nullable=False)
+    created_by_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
+    url = Column(String(2000), nullable=False)
+    secret = Column(String(128), nullable=False)
+    events = Column(JSON, default=list, nullable=False)
+    description = Column(String(500), nullable=True)
+    is_active = Column(Boolean, default=True, nullable=False)
+    created_at = Column(TIMESTAMP(timezone=True), server_default=func.now(), nullable=False)
+    updated_at = Column(TIMESTAMP(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
+
+    organization = relationship("Organization", back_populates="webhooks")
+    created_by = relationship("User", foreign_keys=[created_by_id])
+
+    __table_args__ = (
+        Index("idx_webhooks_org_id", "organization_id"),
+        Index("idx_webhooks_active", "is_active"),
     )

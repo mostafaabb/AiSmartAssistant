@@ -3,7 +3,9 @@ Authentication routes for NexusAI API.
 Handles user registration, login, and token refresh.
 """
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from uuid import UUID
+
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from datetime import timedelta
@@ -16,8 +18,11 @@ from backend.app.core import (
     create_refresh_token,
     verify_token,
     get_db,
+    get_current_user,
     settings,
 )
+from backend.app.core.rate_limit import limiter
+from backend.app.services.audit_service import write_audit
 from backend.app.models import User
 from backend.app.schemas import (
     UserRegisterRequest,
@@ -31,9 +36,11 @@ router = APIRouter(prefix="/api/v2/auth", tags=["Authentication"])
 
 
 @router.post("/register", response_model=TokenResponse, status_code=status.HTTP_201_CREATED)
+@limiter.limit("15/hour")
 async def register(
-    request: UserRegisterRequest,
-    db: AsyncSession = Depends(get_db)
+    request: Request,
+    payload: UserRegisterRequest,
+    db: AsyncSession = Depends(get_db),
 ):
     """
     Register a new user account.
@@ -55,7 +62,7 @@ async def register(
     try:
         # Check if email already exists
         result = await db.execute(
-            select(User).where(User.email == request.email)
+            select(User).where(User.email == payload.email)
         )
         if result.scalar_one_or_none():
             raise HTTPException(
@@ -65,7 +72,7 @@ async def register(
 
         # Check if username already exists
         result = await db.execute(
-            select(User).where(User.username == request.username)
+            select(User).where(User.username == payload.username)
         )
         if result.scalar_one_or_none():
             raise HTTPException(
@@ -75,11 +82,11 @@ async def register(
 
         # Create new user
         new_user = User(
-            email=request.email,
-            username=request.username,
-            password_hash=hash_password(request.password),
-            first_name=request.first_name,
-            last_name=request.last_name,
+            email=payload.email,
+            username=payload.username,
+            password_hash=hash_password(payload.password),
+            first_name=payload.first_name,
+            last_name=payload.last_name,
         )
 
         db.add(new_user)
@@ -88,6 +95,15 @@ async def register(
 
         logger.info(f"✅ New user registered: {new_user.email}")
 
+        await write_audit(
+            user_id=new_user.id,
+            action="auth.register",
+            resource_type="user",
+            resource_id=str(new_user.id),
+            details={"email": new_user.email},
+            request=request,
+        )
+
         # Generate tokens
         access_token = create_access_token({"sub": str(new_user.id)})
         refresh_token = create_refresh_token({"sub": str(new_user.id)})
@@ -95,6 +111,7 @@ async def register(
         return TokenResponse(
             access_token=access_token,
             refresh_token=refresh_token,
+            token_type="bearer",
             expires_in=settings.access_token_expire_minutes * 60,
         )
 
@@ -110,9 +127,11 @@ async def register(
 
 
 @router.post("/login", response_model=TokenResponse)
+@limiter.limit("30/minute")
 async def login(
-    request: UserLoginRequest,
-    db: AsyncSession = Depends(get_db)
+    request: Request,
+    payload: UserLoginRequest,
+    db: AsyncSession = Depends(get_db),
 ):
     """
     User login with email and password.
@@ -132,12 +151,12 @@ async def login(
     try:
         # Find user by email
         result = await db.execute(
-            select(User).where(User.email == request.email)
+            select(User).where(User.email == payload.email)
         )
         user = result.scalar_one_or_none()
 
         # Validate credentials
-        if not user or not verify_password(request.password, user.password_hash):
+        if not user or not verify_password(payload.password, user.password_hash):
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Invalid email or password",
@@ -157,6 +176,15 @@ async def login(
 
         logger.info(f"✅ User logged in: {user.email}")
 
+        await write_audit(
+            user_id=user.id,
+            action="auth.login",
+            resource_type="user",
+            resource_id=str(user.id),
+            details={"email": user.email},
+            request=request,
+        )
+
         # Generate tokens
         access_token = create_access_token({"sub": str(user.id)})
         refresh_token = create_refresh_token({"sub": str(user.id)})
@@ -164,6 +192,7 @@ async def login(
         return TokenResponse(
             access_token=access_token,
             refresh_token=refresh_token,
+            token_type="bearer",
             expires_in=settings.access_token_expire_minutes * 60,
         )
 
@@ -229,6 +258,7 @@ async def refresh_token(request: dict, db: AsyncSession = Depends(get_db)):
         return TokenResponse(
             access_token=access_token,
             refresh_token=refresh_token_str,
+            token_type="bearer",
             expires_in=settings.access_token_expire_minutes * 60,
         )
 
@@ -244,8 +274,8 @@ async def refresh_token(request: dict, db: AsyncSession = Depends(get_db)):
 
 @router.get("/me", response_model=UserResponse)
 async def get_current_user_profile(
-    current_user_id: str = Depends(lambda: None),  # Placeholder
-    db: AsyncSession = Depends(get_db)
+    current_user_id: str = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
 ):
     """
     Get current authenticated user's profile information.
@@ -267,7 +297,7 @@ async def get_current_user_profile(
         )
 
     result = await db.execute(
-        select(User).where(User.id == current_user_id)
+        select(User).where(User.id == UUID(current_user_id))
     )
     user = result.scalar_one_or_none()
 
@@ -277,7 +307,7 @@ async def get_current_user_profile(
             detail="User not found"
         )
 
-    return UserResponse.from_orm(user)
+    return UserResponse.model_validate(user)
 
 
 @router.post("/logout")

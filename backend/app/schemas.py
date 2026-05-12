@@ -243,3 +243,86 @@ class HealthResponse(BaseModel):
     environment: str
     timestamp: datetime
     database: str = "connected"
+
+
+# ======================== API KEYS & WEBHOOKS ========================
+
+class ApiKeyCreateRequest(BaseModel):
+    name: str = Field(..., min_length=1, max_length=120)
+    organization_id: Optional[UUID] = None
+    scopes: List[str] = Field(default_factory=lambda: ["read", "write"])
+    expires_in_days: Optional[int] = Field(None, ge=1, le=365)
+
+
+class ApiKeyResponse(BaseModel):
+    id: UUID
+    name: str
+    prefix_display: str
+    scopes: List[str]
+    organization_id: Optional[UUID]
+    created_at: datetime
+    expires_at: Optional[datetime]
+    revoked_at: Optional[datetime]
+    last_used_at: Optional[datetime]
+
+    class Config:
+        from_attributes = True
+
+
+class ApiKeyCreatedResponse(ApiKeyResponse):
+    api_key: str = Field(..., description="Full secret; store securely — not shown again")
+
+
+class WebhookCreateRequest(BaseModel):
+    url: str = Field(..., min_length=8, max_length=2000)
+    events: List[str] = Field(
+        default_factory=list,
+        description="Event names to receive; empty list means all supported events",
+    )
+    description: Optional[str] = Field(None, max_length=500)
+
+
+class WebhookUpdateRequest(BaseModel):
+    url: Optional[str] = Field(None, max_length=2000)
+    events: Optional[List[str]] = None
+    description: Optional[str] = Field(None, max_length=500)
+    is_active: Optional[bool] = None
+
+
+class WebhookResponse(BaseModel):
+    id: UUID
+    organization_id: UUID
+    url: str
+    events: List[str]
+    description: Optional[str]
+    is_active: bool
+    created_at: datetime
+    updated_at: datetime
+    secret_hint: Optional[str] = Field(None, description="Last 4 characters of signing secret")
+
+    class Config:
+        from_attributes = True
+
+
+class WebhookCreatedResponse(WebhookResponse):
+    signing_secret: str = Field(..., description="HMAC signing key; store securely — not shown again")
+
+
+class AuditLogResponse(BaseModel):
+    id: UUID
+    user_id: Optional[UUID]
+    action: str
+    resource_type: str
+    resource_id: Optional[str]
+    details: Dict[str, Any]
+    ip_address: Optional[str]
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class UsageMetricsResponse(BaseModel):
+    period_hours: int = 24
+    audit_events: int
+    code_executions: int

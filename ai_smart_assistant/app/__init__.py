@@ -51,7 +51,7 @@ def create_app(config_class=None):
     # Flask-Limiter 4.x: configure via app.config, then init_app(app)
     if app.config.get("RATELIMIT_ENABLED"):
         app.config.setdefault(
-            "RATELIMIT_DEFAULT", ["400 per hour", "120 per minute"]
+            "RATELIMIT_DEFAULT", "400 per hour; 120 per minute"
         )
     else:
         app.config["RATELIMIT_ENABLED"] = False

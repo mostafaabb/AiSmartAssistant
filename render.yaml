@@ -20,11 +20,11 @@ services:
           name: nexus-redis
           property: connectionString
       - key: OPENROUTER_API_KEY
-        sync: false # You must set this in the Render UI
+        sync: false
 
-# Redis for Sessions and Rate Limiting
-redis:
-  - name: nexus-redis
+  # Redis Service (Corrected syntax)
+  - type: redis
+    name: nexus-redis
     plan: free
     region: oregon
-    ipAllowList: [] # Only allow internal connections
+    ipAllowList: []

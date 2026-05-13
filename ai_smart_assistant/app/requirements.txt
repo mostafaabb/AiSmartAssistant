@@ -19,3 +19,4 @@ Flask-Session>=0.5.0
 
 # Rate limiting (production hardening)
 Flask-Limiter>=4.1.0
+whitenoise>=6.6.0

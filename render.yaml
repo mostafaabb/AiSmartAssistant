@@ -1,0 +1,30 @@
+services:
+  # NexusAI Web Service
+  - type: web
+    name: nexus-ai-platform
+    env: docker
+    dockerContext: .
+    dockerfilePath: Dockerfile
+    plan: free
+    region: oregon
+    envVars:
+      - key: FLASK_ENV
+        value: production
+      - key: NEXUS_PRODUCTION
+        value: "true"
+      - key: SECRET_KEY
+        generateValue: true
+      - key: REDIS_URL
+        fromService:
+          type: redis
+          name: nexus-redis
+          property: connectionString
+      - key: OPENROUTER_API_KEY
+        sync: false # You must set this in the Render UI
+
+# Redis for Sessions and Rate Limiting
+redis:
+  - name: nexus-redis
+    plan: free
+    region: oregon
+    ipAllowList: [] # Only allow internal connections

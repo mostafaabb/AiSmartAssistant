@@ -155,7 +155,8 @@ def chat():
         
         api_key = current_app.config.get('OPENROUTER_API_KEY')
         if not api_key or api_key == 'your_openrouter_api_key_here':
-            yield f"data: {json.dumps({'content': '⚠️ **Configuration Required**\n\nPlease set your `OPENROUTER_API_KEY` in the `.env` file.\n\n**Steps:**\n1. Get a free API key at [openrouter.ai/keys](https://openrouter.ai/keys)\n2. Open `.env` file in project root\n3. Replace `your_openrouter_api_key_here` with your key\n4. Restart the server'})}\n\n"
+            config_msg = json.dumps({'content': '⚠️ **Configuration Required**\n\nPlease set your `OPENROUTER_API_KEY` in the `.env` file.\n\n**Steps:**\n1. Get a free API key at [openrouter.ai/keys](https://openrouter.ai/keys)\n2. Open `.env` file in project root\n3. Replace `your_openrouter_api_key_here` with your key\n4. Restart the server'})
+            yield f"data: {config_msg}\n\n"
             return
 
         app_url = current_app.config.get("APP_URL", "http://127.0.0.1:5000")
@@ -224,7 +225,9 @@ def chat():
                 
         if not success:
             debug_info = f"\n\nDEBUG INFO: {last_debug_msg}" if 'last_debug_msg' in locals() else ""
-            yield f"data: {json.dumps({'content': f'\n\n⚠️ **Connection Error**\n\nUnable to reach AI models. Please check:\n1. Your internet connection\n2. Your API key is valid\n3. OpenRouter service status{debug_info}'})}\n\n"
+            error_text = f'\n\n⚠️ **Connection Error**\n\nUnable to reach AI models. Please check:\n1. Your internet connection\n2. Your API key is valid\n3. OpenRouter service status{debug_info}'
+            error_msg = json.dumps({'content': error_text})
+            yield f"data: {error_msg}\n\n"
         else:
             user_state.append_history_assistant(full_response)
 

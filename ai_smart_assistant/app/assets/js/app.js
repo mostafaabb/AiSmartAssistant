@@ -297,6 +297,14 @@ const API = {
             body: JSON.stringify({ content })
         });
     }
+    ,
+    // Request an AI-suggested fix for a code snippet or file
+    aiFix: (code, language = 'python', instruction = '', path = '', apply = false) => {
+        return API.request('/api/ai/fix', {
+            method: 'POST',
+            body: JSON.stringify({ code, language, instruction, path, apply })
+        });
+    }
 };
 
 // ==================== MARKDOWN RENDERER ====================
@@ -545,6 +553,7 @@ const CommandPalette = {
         { id: 'askAI', name: 'Ask AI', icon: '🤖', shortcut: 'Ctrl+/', group: 'AI' },
         { id: 'explainCode', name: 'Explain Code', icon: '💡', group: 'AI' },
         { id: 'debugCode', name: 'Debug Code', icon: '🐛', group: 'AI' },
+        { id: 'fixCode', name: 'AI Fix Code', icon: '🛠️', group: 'AI' },
         { id: 'generateTests', name: 'Generate Tests', icon: '🧪', group: 'AI' },
         { id: 'optimizeCode', name: 'Optimize Code', icon: '⚡', group: 'AI' },
         { id: 'refactorCode', name: 'Refactor Code', icon: '🔄', group: 'AI' },
@@ -714,6 +723,7 @@ const CommandPalette = {
             askAI: () => document.getElementById('user-input')?.focus(),
             explainCode: () => CommandPalette.triggerAIAction('Explain this code in detail'),
             debugCode: () => CommandPalette.triggerAIAction('Find bugs and issues in this code'),
+            fixCode: () => AIFixManager.openFixForCurrentFile(),
             generateTests: () => CommandPalette.triggerAIAction('Generate unit tests for this code'),
             optimizeCode: () => CommandPalette.triggerAIAction('Optimize this code for better performance'),
             refactorCode: () => CommandPalette.triggerAIWithMode('refactor', 'Refactor this code for clarity and maintainability without changing behavior.'),
@@ -1054,6 +1064,112 @@ const SessionManager = {
     clear: () => {
         localStorage.removeItem('nexus-session');
         Toast.info('Session cleared');
+    }
+};
+
+// ==================== AI FIX MANAGER ====================
+const AIFixManager = {
+    modalId: 'ai-fix-modal',
+    suggested: '',
+    original: '',
+    path: '',
+
+    _ensureModal: function() {
+        if (document.getElementById(this.modalId)) return;
+
+        const overlay = document.createElement('div');
+        overlay.id = this.modalId;
+        overlay.className = 'overlay modal ai-fix-modal hidden';
+        overlay.innerHTML = `
+            <div class="modal-card">
+                <div class="modal-header">
+                    <h3>AI Suggested Fix</h3>
+                    <button class="close-modal">×</button>
+                </div>
+                <div class="modal-body">
+                    <label>Target path (workspace): <input id="ai-fix-path" type="text" style="width:70%" /></label>
+                    <div style="margin-top:8px; display:flex; gap:8px;">
+                        <div style="flex:1"><label>Original</label><textarea id="ai-fix-original" class="ai-fix-text" readonly></textarea></div>
+                        <div style="flex:1"><label>Suggested</label><textarea id="ai-fix-suggested" class="ai-fix-text"></textarea></div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button id="ai-fix-apply-editor" class="btn">Apply to Editor</button>
+                    <button id="ai-fix-write-disk" class="btn primary">Write to Disk</button>
+                    <button id="ai-fix-close" class="btn">Close</button>
+                </div>
+            </div>
+        `;
+
+        document.body.appendChild(overlay);
+
+        overlay.querySelector('.close-modal')?.addEventListener('click', () => AIFixManager.hide());
+        document.getElementById('ai-fix-close')?.addEventListener('click', () => AIFixManager.hide());
+        document.getElementById('ai-fix-apply-editor')?.addEventListener('click', () => AIFixManager.applyToEditor());
+        document.getElementById('ai-fix-write-disk')?.addEventListener('click', () => AIFixManager.writeToDisk());
+    },
+
+    openFixForCurrentFile: async function() {
+        this._ensureModal();
+        const code = EditorManager.getValue();
+        const language = document.getElementById('language-select')?.value || Utils.getLanguageFromFilename(NexusAI.state.currentFile || 'untitled.py');
+        const pathInput = document.getElementById('ai-fix-path');
+        this.original = code;
+        this.path = NexusAI.state.currentFile || '';
+        if (pathInput) pathInput.value = this.path;
+        document.getElementById('ai-fix-original').value = this.original;
+        document.getElementById('ai-fix-suggested').value = 'Requesting AI suggestion...';
+        document.getElementById(this.modalId).classList.remove('hidden');
+
+        try {
+            const res = await API.aiFix(code, language, '', this.path, false);
+            if (res && res.success) {
+                this.suggested = res.suggested || '';
+                document.getElementById('ai-fix-suggested').value = this.suggested;
+                Toast.success('AI suggestion ready');
+            } else {
+                const err = (res && (res.error || res.detail)) || 'Unknown AI error';
+                document.getElementById('ai-fix-suggested').value = '';
+                Toast.error(`AI fix failed: ${err}`);
+            }
+        } catch (e) {
+            document.getElementById('ai-fix-suggested').value = '';
+            Toast.error('AI request failed');
+            console.error(e);
+        }
+    },
+
+    hide: function() {
+        const el = document.getElementById(this.modalId);
+        if (el) el.classList.add('hidden');
+    },
+
+    applyToEditor: function() {
+        const suggested = document.getElementById('ai-fix-suggested')?.value || '';
+        if (!suggested) { Toast.warning('No suggestion to apply'); return; }
+        EditorManager.setValue(suggested);
+        Toast.success('Applied suggestion to editor');
+        this.hide();
+    },
+
+    writeToDisk: async function() {
+        const suggested = document.getElementById('ai-fix-suggested')?.value || '';
+        const path = document.getElementById('ai-fix-path')?.value || '';
+        if (!suggested) { Toast.warning('No suggestion to write'); return; }
+        if (!path) { Toast.warning('Please set a workspace path to write to'); return; }
+
+        try {
+            const res = await API.writeToDisk(path, suggested);
+            if (res && res.success) {
+                Toast.success(`Wrote to ${path}`);
+                this.hide();
+            } else {
+                Toast.error(`Write failed: ${res && res.error}`);
+            }
+        } catch (e) {
+            Toast.error('Failed to write file');
+            console.error(e);
+        }
     }
 };
 

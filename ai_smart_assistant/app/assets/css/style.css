@@ -92,6 +92,8 @@ html {
     -webkit-font-smoothing: antialiased;
 }
 
+/* Use flexible body sizing to avoid clipping full-page auth layouts
+   (fixes pages that rely on internal scroll like auth pages) */
 body {
     background: var(--bg-deep);
     background-image:
@@ -99,8 +101,9 @@ body {
         radial-gradient(ellipse 60% 40% at 100% 100%, rgba(168, 85, 247, 0.1), transparent);
     color: var(--text-primary);
     font-family: 'Inter', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
-    height: 100vh;
-    overflow: hidden;
+    min-height: 100vh;
+    height: auto;
+    overflow: auto;
     line-height: 1.5;
 }
 

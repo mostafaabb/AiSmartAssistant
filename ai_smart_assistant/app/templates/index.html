@@ -2124,16 +2124,101 @@ if __name__ == '__main__':
         };
     }
 
-    voiceBtn?.addEventListener('click', () => {
+    voiceBtn?.addEventListener('click', async () => {
         if (!recognition) {
             return showToast('Speech recognition not supported in this browser', 'error');
         }
         if (voiceBtn.classList.contains('recording')) {
             recognition.stop();
-        } else {
+            return;
+        }
+
+        // Try to proactively request microphone permission first so browsers
+        // prompt the user and we avoid the common 'not-allowed' error.
+        try {
+            if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+                await navigator.mediaDevices.getUserMedia({ audio: true });
+            }
+        } catch (permErr) {
+            console.error('Microphone permission error', permErr);
+            if (permErr.name === 'NotAllowedError' || permErr.name === 'SecurityError') {
+                return showToast('Microphone access denied. Allow microphone in browser settings and reload.', 'error');
+            }
+            return showToast('Microphone unavailable: ' + (permErr.message || permErr.name), 'error');
+        }
+
+        // Start recognition after permission successfully requested
+        try {
             recognition.start();
+        } catch (startErr) {
+            console.error('Recognition start error', startErr);
+            showToast('Unable to start speech recognition: ' + (startErr.message || startErr.name), 'error');
         }
     });
+
+    // If the Web Speech API is not available, fall back to MediaRecorder + server STT
+    if (!('webkitSpeechRecognition' in window || 'SpeechRecognition' in window)) {
+        let mediaStream = null;
+        let recorder = null;
+        let chunks = [];
+
+        async function ensureMic() {
+            if (!mediaStream) {
+                mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            }
+        }
+
+        async function startFallback() {
+            try {
+                await ensureMic();
+                chunks = [];
+                recorder = new MediaRecorder(mediaStream);
+                recorder.ondataavailable = e => { if (e.data && e.data.size) chunks.push(e.data); };
+                recorder.onstop = onFallbackStop;
+                recorder.start();
+                voiceBtn.classList.add('recording');
+                showToast('Recording (fallback)...', 'info');
+            } catch (err) {
+                console.error('Fallback mic error', err);
+                showToast('Microphone error: ' + (err.message || err.name), 'error');
+            }
+        }
+
+        async function stopFallback() {
+            if (recorder && recorder.state !== 'inactive') recorder.stop();
+        }
+
+        async function onFallbackStop() {
+            voiceBtn.classList.remove('recording');
+            const blob = new Blob(chunks, { type: 'audio/webm' });
+            const form = new FormData();
+            form.append('audio', blob, 'recording.webm');
+            try {
+                const res = await fetch('/stt', { method: 'POST', body: form });
+                const j = await res.json();
+                if (j.success) {
+                    document.getElementById('user-input').value = j.text;
+                    showToast('Transcribed (fallback): ' + (j.text || '[empty]'), 'success');
+                } else {
+                    showToast('STT error: ' + (j.error || j.detail || 'unknown'), 'error');
+                }
+            } catch (err) {
+                console.error('Fallback upload error', err);
+                showToast('Upload failed: ' + (err.message || err.name), 'error');
+            }
+        }
+
+        voiceBtn?.addEventListener('click', async () => {
+            if (!mediaStream) {
+                try { await ensureMic(); } catch (err) { return; }
+            }
+            if (recorder && recorder.state === 'recording') {
+                await stopFallback();
+            } else {
+                await startFallback();
+            }
+        });
+    }
 
     // Close shortcuts modal
     document.getElementById('close-shortcuts-btn')?.addEventListener('click', () => {

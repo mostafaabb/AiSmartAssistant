@@ -381,6 +381,15 @@ body.layout-resizing-v * {
     transition: border-color var(--transition-base);
 }
 
+/* Allow panel content areas to scroll when content is taller than the panel.
+   Keeps header fixed while body can scroll. Targets common panel content wrappers. */
+.panel > .panel-body,
+.panel > .git-panel-content,
+.panel > .explorer-content {
+    overflow: auto;
+    -webkit-overflow-scrolling: touch;
+}
+
 .panel:hover {
     border-color: var(--glass-border-light);
 }

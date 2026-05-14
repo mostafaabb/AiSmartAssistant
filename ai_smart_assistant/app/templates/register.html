@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Create Account — NexusAI</title>
+    <meta name="description" content="Create your NexusAI account and start coding with AI assistance.">
+
+    <!-- Favicon -->
+    <link rel="icon" type="image/svg+xml"
+        href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><defs><linearGradient id='g' x1='0%25' y1='0%25' x2='100%25' y2='100%25'><stop offset='0%25' style='stop-color:%236366f1'/><stop offset='100%25' style='stop-color:%23a855f7'/></linearGradient></defs><circle cx='50' cy='50' r='45' fill='url(%23g)'/><text x='50' y='68' font-size='50' text-anchor='middle' fill='white' font-family='Arial'>N</text></svg>">
+
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+
+    <!-- Stylesheet -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+
+<body class="auth-body">
+    <!-- Animated Background -->
+    <div class="auth-bg">
+        <div class="auth-orb auth-orb-1"></div>
+        <div class="auth-orb auth-orb-2"></div>
+        <div class="auth-orb auth-orb-3"></div>
+        <div class="auth-grid"></div>
+    </div>
+
+    <div class="auth-container">
+        <!-- Left Branding Panel -->
+        <div class="auth-brand-panel">
+            <div class="auth-brand-content">
+                <div class="auth-logo">
+                    <div class="auth-logo-ring"></div>
+                    <span class="auth-logo-icon">N</span>
+                </div>
+                <h1 class="auth-brand-title">NexusAI</h1>
+                <p class="auth-brand-subtitle">Intelligent Code Assistant</p>
+                <div class="auth-brand-features">
+                    <div class="auth-feature">
+                        <span class="auth-feature-icon">🎯</span>
+                        <div>
+                            <strong>Smart Code Completion</strong>
+                            <p>Context-aware AI suggestions as you type</p>
+                        </div>
+                    </div>
+                    <div class="auth-feature">
+                        <span class="auth-feature-icon">🛠️</span>
+                        <div>
+                            <strong>Debugging & Reviews</strong>
+                            <p>Instant bug detection and code review</p>
+                        </div>
+                    </div>
+                    <div class="auth-feature">
+                        <span class="auth-feature-icon">📁</span>
+                        <div>
+                            <strong>Project Workspace</strong>
+                            <p>Full project management with file explorer</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="auth-brand-footer">
+                <p>Start coding smarter today</p>
+            </div>
+        </div>
+
+        <!-- Right Form Panel -->
+        <div class="auth-form-panel">
+            <div class="auth-form-wrapper">
+                <div class="auth-form-header">
+                    <h2>Create your account</h2>
+                    <p>Join thousands of developers using NexusAI</p>
+                </div>
+
+                {% if error %}
+                <div class="auth-alert auth-alert-error">
+                    <span class="auth-alert-icon">✕</span>
+                    <span>{{ error }}</span>
+                </div>
+                {% endif %}
+
+                <form method="POST" action="{{ url_for('main.register') }}" class="auth-form" id="register-form">
+                    <div class="auth-field">
+                        <label for="fullname-input">Full Name <span class="auth-optional">(optional)</span></label>
+                        <div class="auth-input-wrap">
+                            <span class="auth-input-icon">✨</span>
+                            <input type="text" id="fullname-input" name="full_name" placeholder="John Doe" autocomplete="name" value="{{ form_data.full_name if form_data else '' }}">
+                        </div>
+                    </div>
+
+                    <div class="auth-field">
+                        <label for="username-input">Username</label>
+                        <div class="auth-input-wrap">
+                            <span class="auth-input-icon">👤</span>
+                            <input type="text" id="username-input" name="username" placeholder="Choose a username" required autocomplete="username" pattern="[a-zA-Z0-9_]{3,30}" title="3-30 characters: letters, numbers, underscores" value="{{ form_data.username if form_data else '' }}">
+                        </div>
+                        <span class="auth-field-hint">3-30 characters • letters, numbers, underscores</span>
+                    </div>
+
+                    <div class="auth-field">
+                        <label for="email-input">Email Address</label>
+                        <div class="auth-input-wrap">
+                            <span class="auth-input-icon">📧</span>
+                            <input type="email" id="email-input" name="email" placeholder="you@example.com" required autocomplete="email" value="{{ form_data.email if form_data else '' }}">
+                        </div>
+                    </div>
+
+                    <div class="auth-field">
+                        <label for="password-input">Password</label>
+                        <div class="auth-input-wrap">
+                            <span class="auth-input-icon">🔒</span>
+                            <input type="password" id="password-input" name="password" placeholder="Create a strong password" required autocomplete="new-password" minlength="6">
+                            <button type="button" class="auth-toggle-pw" id="toggle-pw" title="Show password">👁</button>
+                        </div>
+                        <div class="auth-pw-strength" id="pw-strength">
+                            <div class="auth-pw-bar"><div class="auth-pw-fill" id="pw-fill"></div></div>
+                            <span class="auth-pw-label" id="pw-label">Min 6 characters</span>
+                        </div>
+                    </div>
+
+                    <div class="auth-field">
+                        <label for="confirm-password-input">Confirm Password</label>
+                        <div class="auth-input-wrap">
+                            <span class="auth-input-icon">🔐</span>
+                            <input type="password" id="confirm-password-input" name="confirm_password" placeholder="Re-enter your password" required autocomplete="new-password">
+                        </div>
+                    </div>
+
+                    <button type="submit" class="auth-submit" id="register-btn">
+                        <span class="auth-submit-text">Create Account</span>
+                        <span class="auth-submit-loader hidden">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+                                <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-dasharray="31.4 31.4" transform="rotate(-90 12 12)">
+                                    <animateTransform attributeName="transform" type="rotate" from="0 12 12" to="360 12 12" dur="0.8s" repeatCount="indefinite"/>
+                                </circle>
+                            </svg>
+                        </span>
+                    </button>
+                </form>
+
+                <div class="auth-divider">
+                    <span>Already have an account?</span>
+                </div>
+
+                <a href="{{ url_for('main.login') }}" class="auth-alt-btn">
+                    Sign In Instead
+                </a>
+            </div>
+
+            <div class="auth-form-footer">
+                <p>© 2026 NexusAI — Built with ❤️ for developers</p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Toggle password visibility
+        document.getElementById('toggle-pw').addEventListener('click', function() {
+            const pw = document.getElementById('password-input');
+            const cpw = document.getElementById('confirm-password-input');
+            const isPassword = pw.type === 'password';
+            pw.type = isPassword ? 'text' : 'password';
+            cpw.type = isPassword ? 'text' : 'password';
+            this.textContent = isPassword ? '🙈' : '👁';
+        });
+
+        // Password strength indicator
+        document.getElementById('password-input').addEventListener('input', function() {
+            const pw = this.value;
+            const fill = document.getElementById('pw-fill');
+            const label = document.getElementById('pw-label');
+            let strength = 0;
+
+            if (pw.length >= 6) strength++;
+            if (pw.length >= 10) strength++;
+            if (/[A-Z]/.test(pw)) strength++;
+            if (/[0-9]/.test(pw)) strength++;
+            if (/[^a-zA-Z0-9]/.test(pw)) strength++;
+
+            const levels = [
+                { width: '0%', color: 'var(--text-dim)', text: 'Min 6 characters' },
+                { width: '20%', color: 'var(--error)', text: 'Weak' },
+                { width: '40%', color: 'var(--warning)', text: 'Fair' },
+                { width: '60%', color: 'var(--warning-light)', text: 'Good' },
+                { width: '85%', color: 'var(--success)', text: 'Strong' },
+                { width: '100%', color: 'var(--success-light)', text: 'Excellent' },
+            ];
+
+            const level = levels[strength];
+            fill.style.width = level.width;
+            fill.style.background = level.color;
+            label.textContent = level.text;
+            label.style.color = level.color;
+        });
+
+        // Form validation & submit
+        document.getElementById('register-form').addEventListener('submit', function(e) {
+            const pw = document.getElementById('password-input').value;
+            const cpw = document.getElementById('confirm-password-input').value;
+
+            if (pw !== cpw) {
+                e.preventDefault();
+                const existing = document.querySelector('.auth-alert');
+                if (existing) existing.remove();
+
+                const alert = document.createElement('div');
+                alert.className = 'auth-alert auth-alert-error';
+                alert.innerHTML = '<span class="auth-alert-icon">✕</span><span>Passwords do not match.</span>';
+                document.querySelector('.auth-form-header').after(alert);
+                return;
+            }
+
+            const btn = document.getElementById('register-btn');
+            btn.disabled = true;
+            btn.querySelector('.auth-submit-text').textContent = 'Creating account...';
+            btn.querySelector('.auth-submit-loader').classList.remove('hidden');
+        });
+    </script>
+</body>
+</html>

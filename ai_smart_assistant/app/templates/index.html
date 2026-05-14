@@ -72,6 +72,7 @@
             <button id="format-btn" class="action-btn" style="justify-content: center;">✨ Format Code</button>
             <button id="metrics-btn" class="action-btn" style="justify-content: center;">📊 Code Metrics</button>
             <button id="snippets-btn" class="action-btn" style="justify-content: center;">📚 Snippets</button>
+            <button id="create-project-btn" class="action-btn" style="justify-content: center;">🛠️ New Project</button>
             <a href="/logout" class="action-btn" style="justify-content: center; color: #ef4444; text-decoration: none; font-weight: bold; border-color: rgba(239, 68, 68, 0.3);">🚪 Sign Out</a>
             <input type="file" id="file-input" class="hidden" accept=".py,.js,.html,.css,.json,.txt,.md,.ts,.jsx,.tsx,.vue,.go,.rs,.rb,.php,.sql,.yaml,.yml,.xml,.sh,.bat,.zip">
             <input type="file" id="vision-input" class="hidden" accept="image/*">
@@ -2261,4 +2262,78 @@ if __name__ == '__main__':
         </div>
     </div>
 </div>
+
+<!-- Project Runner Modal -->
+<div id="project-runner-modal" class="modal-overlay hidden">
+    <div class="command-palette" style="width:720px; max-width:95%;">
+        <div style="padding:1rem; display:flex; justify-content:space-between; align-items:center;">
+            <h3>Create & Run Project</h3>
+            <button id="close-project-modal" class="btn-icon">✕</button>
+        </div>
+        <div style="padding:1rem; display:flex; gap:1rem; flex-direction:column;">
+            <label>Project name</label>
+            <input id="pr-name" type="text" placeholder="my-app" style="padding:0.5rem; border-radius:6px; border:1px solid var(--glass-border); background:var(--bg-surface); color:var(--text-primary);">
+            <label>Template</label>
+            <select id="pr-template" style="padding:0.5rem; border-radius:6px; border:1px solid var(--glass-border); background:var(--bg-surface); color:var(--text-primary);">
+                <option value="static">Static HTML</option>
+                <option value="node">Node (Express static)</option>
+            </select>
+            <div style="display:flex; gap:0.5rem;">
+                <button id="pr-create-run" class="btn-primary">Create & Run</button>
+                <button id="pr-stop" class="action-btn">Stop</button>
+                <a id="pr-open" class="action-btn" target="_blank" style="display:none;">Open Preview</a>
+            </div>
+            <div id="pr-preview-wrap" style="margin-top:1rem; display:none;">
+                <div style="border:1px solid var(--glass-border); border-radius:6px; overflow:hidden; height:360px;">
+                    <iframe id="pr-preview-iframe" src="about:blank" style="width:100%; height:100%; border:none;"></iframe>
+                </div>
+            </div>
+            <div id="pr-logs" style="margin-top:0.5rem; display:none; max-height:160px; overflow:auto; background:var(--bg-elevated); padding:0.5rem; border-radius:6px; border:1px solid var(--glass-border); color:var(--text-muted);"></div>
+        </div>
+    </div>
+</div>
+
+<script>
+// Project Runner UI handlers
+document.getElementById('create-project-btn')?.addEventListener('click', ()=>{
+    document.getElementById('project-runner-modal').classList.remove('hidden');
+});
+document.getElementById('close-project-modal')?.addEventListener('click', ()=>{
+    document.getElementById('project-runner-modal').classList.add('hidden');
+});
+
+async function createAndRun() {
+    const name = document.getElementById('pr-name').value || 'my-app';
+    const template = document.getElementById('pr-template').value;
+    const r = await fetch('/projects/create', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({name, template})});
+    const j = await r.json();
+    if (!j.success) return showToast('Create failed: '+(j.error||'unknown'),'error');
+    const pid = j.project_id;
+    const rr = await fetch('/projects/run', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({project_id: pid})});
+    const jr = await rr.json();
+    if (!jr.success) return showToast('Run failed: '+(jr.error||'unknown'),'error');
+    const url = jr.url;
+    const iid = jr.instance_id;
+    document.getElementById('pr-open').href = url; document.getElementById('pr-open').style.display='inline-block';
+    const iframe = document.getElementById('pr-preview-iframe'); iframe.src = url;
+    document.getElementById('pr-preview-wrap').style.display='block';
+    document.getElementById('pr-logs').style.display='block';
+    document.getElementById('pr-logs').textContent = `Started instance ${iid} at ${url}\n`;
+    // attach stop action
+    document.getElementById('pr-stop').onclick = async ()=>{
+        const s = await fetch('/projects/stop', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({instance_id: iid})});
+        const js = await s.json();
+        if (js.success) {
+            showToast('Stopped instance','success');
+            document.getElementById('pr-logs').textContent += 'Stopped.\n';
+            document.getElementById('pr-open').style.display='none';
+            document.getElementById('pr-preview-wrap').style.display='none';
+        } else {
+            showToast('Stop failed: '+(js.error||'unknown'),'error');
+        }
+    };
+}
+
+document.getElementById('pr-create-run')?.addEventListener('click', ()=>{ createAndRun(); });
+</script>
 {% endblock %}

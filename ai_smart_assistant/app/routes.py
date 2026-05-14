@@ -49,6 +49,7 @@ from ai_smart_assistant.app.extensions import limiter
 from ai_smart_assistant.app.security_git import is_allowed_git_remote
 from ai_smart_assistant.app import user_state
 from ai_smart_assistant.app.workspace_fs import ensure_workspace, safe_join
+from ai_smart_assistant.app import project_runner
 
 logger = logging.getLogger(__name__)
 
@@ -107,6 +108,59 @@ def index():
         code_context=payload["code_context"],
         user=user
     )
+
+
+@main.route('/projects/create', methods=['POST'])
+@login_required
+def projects_create():
+    data = request.get_json() or {}
+    name = data.get('name') or 'untitled'
+    template = data.get('template') or 'static'
+    proj = project_runner.create_project(name, template)
+    if not proj:
+        return jsonify({'success': False, 'error': 'Could not create project'}), 500
+    return jsonify({'success': True, 'project_id': proj})
+
+
+@main.route('/projects/run', methods=['POST'])
+@login_required
+def projects_run():
+    data = request.get_json() or {}
+    pid = data.get('project_id')
+    if not pid:
+        return jsonify({'success': False, 'error': 'project_id required'}), 400
+    res = project_runner.run_project(pid)
+    if not res or 'error' in res:
+        return jsonify({'success': False, 'error': res.get('error') if res else 'failed to run'}), 500
+    port = res.get('port')
+    # build preview url using request host
+    hostname = request.host.split(':')[0]
+    scheme = request.scheme
+    preview_url = f"{scheme}://{hostname}:{port}"
+    return jsonify({'success': True, 'instance_id': res.get('instance_id'), 'port': port, 'url': preview_url})
+
+
+@main.route('/projects/stop', methods=['POST'])
+@login_required
+def projects_stop():
+    data = request.get_json() or {}
+    iid = data.get('instance_id')
+    if not iid:
+        return jsonify({'success': False, 'error': 'instance_id required'}), 400
+    res = project_runner.stop_instance(iid)
+    if 'error' in res:
+        return jsonify({'success': False, 'error': res.get('error')}), 500
+    return jsonify({'success': True})
+
+
+@main.route('/projects/list', methods=['GET'])
+@login_required
+def projects_list():
+    root = project_runner.projects_root()
+    items = []
+    for name in os.listdir(root):
+        items.append(name)
+    return jsonify({'success': True, 'projects': items, 'instances': project_runner.list_instances()})
 
 @main.route('/login', methods=['GET', 'POST'])
 def login():

@@ -31,9 +31,13 @@ from datetime import datetime
 
 from flask import (
     Blueprint, render_template, request, current_app,
-    redirect, url_for, jsonify, Response, stream_with_context
+    redirect, url_for, jsonify, Response, stream_with_context,
+    session, flash
 )
 from werkzeug.utils import secure_filename
+from functools import wraps
+
+from ai_smart_assistant.app.auth import authenticate_user, register_user, get_user_by_id
 
 from ai_smart_assistant.app.ai_prompts import (
     build_system_prompt,
@@ -82,15 +86,73 @@ def collect_project_files(root_dir):
                     continue
     return project_files
 
+# Login required decorator
+def login_required(f):
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if 'user_id' not in session:
+            return redirect(url_for('main.login'))
+        return f(*args, **kwargs)
+    return decorated_function
+
 @main.route('/', methods=['GET'])
+@login_required
 def index():
     """Render the main NexusAI editor interface."""
     payload = user_state.template_payload()
+    user = get_user_by_id(session['user_id'])
     return render_template(
         "index.html",
         history=payload["history"],
         code_context=payload["code_context"],
+        user=user
     )
+
+@main.route('/login', methods=['GET', 'POST'])
+def login():
+    if 'user_id' in session:
+        return redirect(url_for('main.index'))
+    
+    error = None
+    if request.method == 'POST':
+        login_val = request.form.get('login')
+        password = request.form.get('password')
+        result = authenticate_user(login_val, password)
+        
+        if result['success']:
+            session.permanent = True
+            session['user_id'] = result['user']['id']
+            session['username'] = result['user']['username']
+            return redirect(url_for('main.index'))
+        else:
+            error = result['error']
+            
+    return render_template("login.html", error=error)
+
+@main.route('/register', methods=['GET', 'POST'])
+def register():
+    if 'user_id' in session:
+        return redirect(url_for('main.index'))
+    
+    error = None
+    if request.method == 'POST':
+        username = request.form.get('username')
+        email = request.form.get('email')
+        password = request.form.get('password')
+        full_name = request.form.get('full_name', '')
+        
+        result = register_user(username, email, password, full_name)
+        if result['success']:
+            return render_template("login.html", success="Account created! Please sign in.")
+        else:
+            error = result['error']
+            
+    return render_template("register.html", error=error, form_data=request.form)
+
+@main.route('/logout')
+def logout():
+    session.clear()
+    return redirect(url_for('main.login'))
 
 
 _SKIP_WORKSPACE_DIRS = frozenset({
@@ -591,6 +653,136 @@ def workspace_search():
                         break
 
     return jsonify({"hits": hits, "truncated": False, "scanned_files": scanned})
+
+
+@main.route('/api/workspace/replace', methods=['POST'])
+@login_required
+@limiter.limit("20 per minute")
+def workspace_replace():
+    """Global find and replace across text files in workspace."""
+    data = request.get_json(silent=True) or {}
+    find_text = data.get('find', '')
+    replace_text = data.get('replace', '')
+    
+    if not find_text:
+        return jsonify({"error": "Find text cannot be empty"}), 400
+        
+    root = ensure_workspace()
+    changed_files = []
+    
+    for dirpath, dirnames, filenames in os.walk(root):
+        dirnames[:] = [d for d in dirnames if d not in _SKIP_WORKSPACE_DIRS]
+        for name in filenames:
+            abs_path = os.path.join(dirpath, name)
+            rel = os.path.relpath(abs_path, root).replace("\\", "/")
+            
+            try:
+                # Basic check if it's a text file
+                with open(abs_path, 'rb') as f:
+                    chunk = f.read(8000)
+                    if b'\0' in chunk: continue
+                    
+                with open(abs_path, 'r', encoding='utf-8', errors='replace') as f:
+                    content = f.read()
+                
+                if find_text in content:
+                    new_content = content.replace(find_text, replace_text)
+                    with open(abs_path, 'w', encoding='utf-8') as f:
+                        f.write(new_content)
+                    changed_files.append(rel)
+            except Exception:
+                continue
+                
+    return jsonify({"success": True, "changed_files": changed_files, "count": len(changed_files)})
+
+
+# ==================== GIT INTEGRATION ENDPOINTS ====================
+
+@main.route('/api/git/status', methods=['GET'])
+@login_required
+def git_status():
+    """Get status of the workspace repository."""
+    try:
+        # Check if git is initialized
+        if not os.path.exists(os.path.join(os.getcwd(), '.git')):
+            return jsonify({"initialized": False})
+
+        # Run git status --porcelain for easy parsing
+        result = subprocess.run(
+            ["git", "status", "--porcelain", "-u"],
+            capture_output=True, text=True, check=True
+        )
+        
+        files = []
+        for line in result.stdout.splitlines():
+            if not line.strip(): continue
+            status = line[:2].strip()
+            path = line[3:].strip()
+            files.append({"path": path, "status": status})
+            
+        # Get branch name
+        branch = subprocess.run(
+            ["git", "branch", "--show-current"],
+            capture_output=True, text=True
+        ).stdout.strip()
+        
+        return jsonify({
+            "initialized": True,
+            "branch": branch,
+            "files": files
+        })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@main.route('/api/git/init', methods=['POST'])
+@login_required
+def git_init():
+    """Initialize a new git repository in the current workspace."""
+    try:
+        # Check if already initialized
+        if os.path.exists(os.path.join(os.getcwd(), '.git')):
+            return jsonify({"success": True, "message": "Already initialized"})
+            
+        subprocess.run(["git", "init"], check=True)
+        # Create an initial commit to make the branch 'main' exist
+        with open(".gitignore", "a") as f:
+            f.write("\n# NexusAI\n__pycache__/\n*.pyc\n")
+        subprocess.run(["git", "add", ".gitignore"], check=True)
+        subprocess.run(["git", "commit", "-m", "Initial commit via NexusAI"], check=True)
+        
+        return jsonify({"success": True})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@main.route('/api/git/stage', methods=['POST'])
+@login_required
+def git_stage():
+    """Stage a file for commit."""
+    data = request.json or {}
+    path = data.get('path')
+    if not path: return jsonify({"error": "No path provided"}), 400
+    
+    try:
+        subprocess.run(["git", "add", path], check=True)
+        return jsonify({"success": True})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@main.route('/api/git/commit', methods=['POST'])
+@login_required
+def git_commit():
+    """Commit staged changes."""
+    data = request.json or {}
+    message = data.get('message', 'NexusAI automatic commit')
+    
+    try:
+        subprocess.run(["git", "commit", "-m", message], check=True)
+        return jsonify({"success": True})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 
 @main.route('/api/context', methods=['GET'])

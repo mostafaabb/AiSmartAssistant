@@ -2666,3 +2666,161 @@ body.layout-resizing-v * {
         font-size: 1.375rem;
     }
 }
+/* User Avatar & Voice Button */
+.user-avatar {
+    width: 32px;
+    height: 32px;
+    background: linear-gradient(135deg, var(--primary), var(--secondary));
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    font-weight: 800;
+    font-size: 0.8rem;
+    box-shadow: 0 0 15px var(--primary-glow);
+    border: 2px solid var(--glass-border-light);
+}
+
+.btn-voice {
+    background: var(--bg-surface);
+    border: 1px solid var(--glass-border);
+    color: var(--text-muted);
+    width: 44px;
+    height: 44px;
+    border-radius: var(--radius-md);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all var(--transition-fast);
+}
+
+.btn-voice:hover {
+    background: var(--error-bg);
+    border-color: var(--error);
+    color: var(--error-light);
+}
+
+.btn-voice.active {
+    background: var(--error);
+    color: white;
+    animation: voicePulse 1.5s infinite;
+    border-color: var(--error);
+}
+
+@keyframes voicePulse {
+    0% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.4); }
+    70% { box-shadow: 0 0 0 15px rgba(239, 68, 68, 0); }
+    100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
+}
+
+.find-workspace-modal {
+    max-width: 600px;
+    width: 90%;
+}
+
+.find-workspace-search-row {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.find-workspace-input-group {
+    display: flex;
+    gap: 8px;
+}
+
+/* IDE Expansion Activity Bar */
+.activity-bar {
+    width: 54px;
+    background: var(--bg-deep);
+    border-right: 1px solid var(--glass-border);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 1rem 0;
+    gap: 0.5rem;
+    z-index: 10;
+}
+
+.activity-btn {
+    width: 42px;
+    height: 42px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: transparent;
+    border: none;
+    color: var(--text-dim);
+    font-size: 1.25rem;
+    border-radius: var(--radius-md);
+    cursor: pointer;
+    transition: all var(--transition-fast);
+    position: relative;
+}
+
+.activity-btn:hover {
+    color: var(--text-primary);
+    background: var(--bg-hover);
+}
+
+.activity-btn.active {
+    color: var(--primary-light);
+    background: var(--primary-subtle);
+}
+
+.activity-btn.active::before {
+    content: "";
+    position: absolute;
+    left: 0;
+    top: 20%;
+    bottom: 20%;
+    width: 3px;
+    background: var(--primary);
+    border-radius: 0 4px 4px 0;
+}
+
+.side-panel {
+    display: none;
+    flex-direction: column;
+    height: 100%;
+}
+
+.side-panel.active {
+    display: flex;
+}
+
+.search-container {
+    padding: 1rem;
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+.git-panel-content {
+    padding: 1rem;
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+}
+
+.git-commit-box {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.git-commit-input {
+    width: 100%;
+    min-height: 80px;
+    background: var(--bg-surface);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-md);
+    padding: 0.75rem;
+    color: var(--text-primary);
+    font-size: 0.8rem;
+    font-family: inherit;
+    resize: none;
+}
+

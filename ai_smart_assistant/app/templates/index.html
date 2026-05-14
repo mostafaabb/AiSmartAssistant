@@ -1,9 +1,19 @@
 {% extends 'base.html' %}
 
 {% block content %}
-<!-- Left Pane: Project Explorer -->
+<!-- Activity Bar (Far Left) -->
+<nav class="activity-bar">
+    <button class="activity-btn active" data-tab="explorer-panel" title="Explorer">📁</button>
+    <button class="activity-btn" data-tab="search-panel" title="Global Search">🔎</button>
+    <button class="activity-btn" data-tab="git-panel" title="Source Control">🌿</button>
+    <div style="flex: 1;"></div>
+    <button class="activity-btn" data-tab="settings-panel" title="Settings">⚙️</button>
+</nav>
+
+<!-- Left Pane: Side Panels -->
 <aside class="explorer-pane" id="explorer-pane">
-    <section class="panel" style="height: 100%;">
+    <!-- Explorer Panel -->
+    <section class="panel side-panel active" id="explorer-panel" style="height: 100%;">
         <header class="panel-header">
             <h2><span>📁</span> Explorer</h2>
             <div style="display: flex; gap: 5px;">
@@ -65,6 +75,101 @@
             <a href="/logout" class="action-btn" style="justify-content: center; color: #ef4444; text-decoration: none; font-weight: bold; border-color: rgba(239, 68, 68, 0.3);">🚪 Sign Out</a>
             <input type="file" id="file-input" class="hidden" accept=".py,.js,.html,.css,.json,.txt,.md,.ts,.jsx,.tsx,.vue,.go,.rs,.rb,.php,.sql,.yaml,.yml,.xml,.sh,.bat,.zip">
             <input type="file" id="vision-input" class="hidden" accept="image/*">
+        </div>
+    </section>
+
+    <!-- Search & Replace Panel -->
+    <section class="panel side-panel" id="search-panel" style="height: 100%;">
+        <header class="panel-header">
+            <h2><span>🔎</span> Hyper-Search</h2>
+        </header>
+        <div class="search-container">
+            <div class="search-input-group">
+                <label for="global-find-input">Find</label>
+                <div class="search-input-wrap">
+                    <input type="text" id="global-find-input" class="search-input" placeholder="Text to find...">
+                </div>
+            </div>
+            <div class="search-input-group">
+                <label for="global-replace-input">Replace</label>
+                <div class="search-input-wrap">
+                    <input type="text" id="global-replace-input" class="search-input" placeholder="Replace with...">
+                </div>
+            </div>
+            <div class="search-actions">
+                <button id="global-search-btn" class="btn-primary" style="flex: 1;">Search</button>
+                <button id="global-replace-btn" class="action-btn">Replace All</button>
+            </div>
+            <div id="global-search-results" class="explorer-content" style="margin-top: 1rem; border-top: 1px solid var(--glass-border);">
+                <!-- Results will appear here -->
+            </div>
+        </div>
+    </section>
+
+    <!-- Git Sentinel Panel -->
+    <section class="panel side-panel" id="git-panel" style="height: 100%;">
+        <header class="panel-header">
+            <h2><span>🌿</span> Git Sentinel</h2>
+            <button class="btn-icon" id="git-refresh-btn" title="Refresh Status">🔄</button>
+        </header>
+        <div class="git-panel-content">
+            <div class="git-commit-box">
+                <textarea id="git-commit-msg" class="git-commit-input" placeholder="Commit message (Ctrl+Enter to commit)"></textarea>
+                <button id="git-commit-btn" class="btn-primary">Commit to Main</button>
+            </div>
+            <div class="panel-header" style="padding: 0.5rem 0; border-bottom: none;">
+                <h2 style="font-size: 0.7rem; color: var(--text-muted);">Changes</h2>
+            </div>
+            <div id="git-changes-list" class="git-file-list">
+                <div class="tree-item" style="justify-content: center; opacity: 0.5;">No changes detected</div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Settings Panel -->
+    <section class="panel side-panel" id="settings-panel" style="height: 100%;">
+        <header class="panel-header">
+            <h2><span>⚙️</span> IDE Settings</h2>
+        </header>
+        <div class="git-panel-content">
+            <div class="profile-section" style="padding: 1rem; margin-bottom: 1rem; background: var(--bg-surface);">
+                <div class="profile-avatar" style="width: 40px; height: 40px; font-size: 1rem;">{{ user.username[0].upper() if user else 'U' }}</div>
+                <div class="profile-info">
+                    <h3 style="font-size: 0.9rem;">{{ user.username if user else 'Guest' }}</h3>
+                    <p style="font-size: 0.7rem;">{{ user.email if user else 'Not signed in' }}</p>
+                </div>
+            </div>
+
+            <div class="search-input-group">
+                <label>Editor Font Size</label>
+                <select id="setting-font-size" class="search-input">
+                    <option value="12">12px</option>
+                    <option value="14" selected>14px</option>
+                    <option value="16">16px</option>
+                    <option value="18">18px</option>
+                </select>
+            </div>
+
+            <div class="search-input-group" style="margin-top: 1rem;">
+                <label>AI Model Priority</label>
+                <select id="setting-ai-model" class="search-input">
+                    <option value="gpt-4o">GPT-4o (Premium)</option>
+                    <option value="claude-3-5-sonnet">Claude 3.5 Sonnet</option>
+                    <option value="nexus-fast">Nexus-Fast (Optimized)</option>
+                </select>
+            </div>
+
+            <div class="search-input-group" style="margin-top: 1rem;">
+                <label>UI Theme</label>
+                <div style="display: flex; gap: 0.5rem;">
+                    <button class="action-btn active" style="flex: 1;">Nexus Dark</button>
+                    <button class="action-btn" style="flex: 1; opacity: 0.5;" disabled>OLED Black</button>
+                </div>
+            </div>
+            
+            <div style="margin-top: auto; padding-top: 2rem;">
+                 <a href="/logout" class="auth-alt-btn" style="color: var(--error); border-color: rgba(239, 68, 68, 0.2); text-decoration: none;">Sign Out</a>
+            </div>
         </div>
     </section>
 </aside>
@@ -233,7 +338,10 @@
 
         <form id="chat-form" class="input-area">
             <textarea name="user_input" id="user-input" placeholder="Ask me anything... (Enter to send, Shift+Enter for new line)" rows="1"></textarea>
-            <button type="submit" class="btn-primary" id="send-btn">➤</button>
+            <div class="input-actions-right">
+                <button type="button" class="btn-icon" id="voice-command-btn" title="Voice Command">🎙️</button>
+                <button type="submit" class="btn-primary" id="send-btn">➤</button>
+            </div>
         </form>
     </section>
 </aside>
@@ -700,12 +808,7 @@
         const appData = document.getElementById('app-data');
         if (!treeContainer || !appData) return;
 
-        const fromPage = JSON.parse(appData.getAttribute('data-files') || '[]');
-        const byName = new Map();
-        fromPage.forEach(f => byName.set(String(f.name).replace(/\\/g, '/'), f));
-        uploadedFiles.forEach(f => byName.set(String(f.name).replace(/\\/g, '/'), f));
-        const inlineList = [...byName.values()];
-
+        // Fetch Workspace Files
         try {
             const r = await fetch('/api/workspace/tree?max=800');
             const d = await r.json();
@@ -714,10 +817,47 @@
             workspaceFileList = [];
         }
 
+        // Fetch Git Status
+        let gitMap = new Map();
+        try {
+            const r = await fetch('/api/git/status');
+            const data = await r.json();
+            if (data.initialized && data.files) {
+                data.files.forEach(f => gitMap.set(f.path, f.status));
+            }
+        } catch (e) { /* Git not available or not init */ }
+
+        const fromPage = JSON.parse(appData.getAttribute('data-files') || '[]');
+        const byName = new Map();
+        fromPage.forEach(f => byName.set(String(f.name).replace(/\\/g, '/'), f));
+        uploadedFiles.forEach(f => byName.set(String(f.name).replace(/\\/g, '/'), f));
+        const inlineList = [...byName.values()];
+
         const inlinePaths = new Set(inlineList.map(f => String(f.name).replace(/\\/g, '/')));
         const diskFiles = workspaceFileList.filter(f => !inlinePaths.has(f.path));
 
         treeContainer.innerHTML = '';
+
+        const renderItem = (name, path, onClick, isActive = false) => {
+            const base = name.split('/').pop();
+            const ext = base.includes('.') ? base.split('.').pop().toLowerCase() : '';
+            const icon = fileIcons[ext] || fileIcons.default;
+            
+            const item = document.createElement('div');
+            item.className = 'tree-item' + (isActive ? ' active' : '');
+            
+            // Git Badge
+            let badgeHtml = '';
+            if (path && gitMap.has(path)) {
+                const status = gitMap.get(path);
+                const badgeClass = status === 'M' ? 'badge-m' : (status === 'A' ? 'badge-a' : 'badge-u');
+                badgeHtml = `<span class="git-status-badge ${badgeClass}" style="margin-left:auto; font-size: 0.6rem; padding: 1px 4px;">${status}</span>`;
+            }
+
+            item.innerHTML = `<span class="tree-icon">${icon}</span><span class="tree-file">${name}</span>${badgeHtml}`;
+            item.onclick = onClick;
+            return item;
+        };
 
         if (inlineList.length) {
             const lab = document.createElement('div');
@@ -725,12 +865,7 @@
             lab.textContent = 'Session / project';
             treeContainer.appendChild(lab);
             inlineList.forEach((file, index) => {
-                const ext = file.name.split('.').pop().toLowerCase();
-                const icon = fileIcons[ext] || fileIcons.default;
-                const item = document.createElement('div');
-                item.className = 'tree-item' + (index === 0 ? ' active' : '');
-                item.innerHTML = `<span class="tree-icon">${icon}</span><span class="tree-file">${file.name}</span>`;
-                item.onclick = () => selectFile(item, file);
+                const item = renderItem(file.name, null, () => selectFile(item, file), index === 0);
                 treeContainer.appendChild(item);
             });
         }
@@ -741,17 +876,11 @@
             lab2.textContent = 'Workspace (disk)';
             treeContainer.appendChild(lab2);
             diskFiles.forEach(f => {
-                const base = f.path.split('/').pop();
-                const ext = base.includes('.') ? base.split('.').pop().toLowerCase() : '';
-                const icon = fileIcons[ext] || fileIcons.default;
-                const item = document.createElement('div');
-                item.className = 'tree-item';
-                item.innerHTML = `<span class="tree-icon">${icon}</span><span class="tree-file">${f.path}</span>`;
-                item.onclick = async () => {
+                const item = renderItem(f.path, f.path, async () => {
                     document.querySelectorAll('#explorer-tree .tree-item').forEach(i => i.classList.remove('active'));
                     item.classList.add('active');
                     await openWorkspacePath(f.path);
-                };
+                });
                 treeContainer.appendChild(item);
             });
         }
@@ -1763,10 +1892,259 @@ if __name__ == '__main__':
         if (window.LivePreview) LivePreview.toggle();
     });
     
+    // =====================================================
+    // Activity Bar & Sidebar Tab Switching
+    // =====================================================
+    document.querySelectorAll('.activity-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const tabId = btn.getAttribute('data-tab');
+            if (!tabId) return;
+
+            // Update buttons
+            document.querySelectorAll('.activity-btn').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+
+            // Update panels
+            document.querySelectorAll('.side-panel').forEach(p => p.classList.remove('active'));
+            document.getElementById(tabId).classList.add('active');
+            
+            // Refresh logic for specific tabs
+            if (tabId === 'git-panel') refreshGitStatus();
+        });
+    });
+
+    // =====================================================
+    // Hyper-Search & Global Replace
+    // =====================================================
+    const searchBtn = document.getElementById('global-search-btn');
+    const replaceBtn = document.getElementById('global-replace-btn');
+    const searchResults = document.getElementById('global-search-results');
+
+    async function performGlobalSearch() {
+        const query = document.getElementById('global-find-input').value;
+        if (!query) return showToast('Please enter text to find', 'warning');
+        
+        searchBtn.disabled = true;
+        searchBtn.innerText = 'Searching...';
+        searchResults.innerHTML = '<div class="tree-item" style="justify-content: center; opacity: 0.5;">Scanning workspace...</div>';
+        
+        try {
+            const r = await fetch('/api/workspace/search', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ query, max_hits: 100 })
+            });
+            const data = await r.json();
+            
+            searchResults.innerHTML = '';
+            if (!data.hits || data.hits.length === 0) {
+                searchResults.innerHTML = '<div class="tree-item" style="justify-content: center; opacity: 0.5;">No results found</div>';
+            } else {
+                data.hits.forEach(hit => {
+                    const item = document.createElement('div');
+                    item.className = 'tree-item';
+                    item.innerHTML = `<span class="tree-icon">📄</span><span class="tree-file"><b>${hit.path}</b>:L${hit.line} - <small>${escapeHtml(hit.snippet)}</small></span>`;
+                    item.onclick = () => openWorkspacePath(hit.path);
+                    searchResults.appendChild(item);
+                });
+            }
+        } catch (e) {
+            showToast('Search failed: ' + e.message, 'error');
+        } finally {
+            searchBtn.disabled = false;
+            searchBtn.innerText = 'Search';
+        }
+    }
+
+    async function performGlobalReplace() {
+        const find = document.getElementById('global-find-input').value;
+        const replace = document.getElementById('global-replace-input').value;
+        if (!find) return showToast('Please enter text to find', 'warning');
+
+        if (!confirm(`Are you sure you want to replace all occurrences of "${find}" with "${replace}" across the entire workspace?`)) return;
+
+        replaceBtn.disabled = true;
+        try {
+            const r = await fetch('/api/workspace/replace', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ find, replace })
+            });
+            const data = await r.json();
+            if (data.success) {
+                showToast(`Successfully updated ${data.count} files`, 'success');
+                refreshWorkspaceTree();
+            } else {
+                showToast(data.error || 'Replace failed', 'error');
+            }
+        } catch (e) {
+            showToast('Replace failed: ' + e.message, 'error');
+        } finally {
+            replaceBtn.disabled = false;
+        }
+    }
+
+    searchBtn?.addEventListener('click', performGlobalSearch);
+    replaceBtn?.addEventListener('click', performGlobalReplace);
+
+    // =====================================================
+    // Git Sentinel Logic
+    // =====================================================
+    async function refreshGitStatus() {
+        const list = document.getElementById('git-changes-list');
+        const commitBtn = document.getElementById('git-commit-btn');
+        
+        try {
+            const r = await fetch('/api/git/status');
+            const data = await r.json();
+            
+            if (!data.initialized) {
+                list.innerHTML = `
+                    <div style="padding: 1rem; text-align: center;">
+                        <p style="font-size: 0.8rem; color: var(--text-dim); margin-bottom: 1rem;">This workspace is not a Git repository.</p>
+                        <button id="git-init-btn" class="btn-primary" style="width: 100%;">Initialize Repository</button>
+                    </div>
+                `;
+                document.getElementById('git-init-btn').onclick = async () => {
+                    try {
+                        const initRes = await fetch('/api/git/init', { method: 'POST' });
+                        if (initRes.ok) {
+                            showToast('Git repository initialized!', 'success');
+                            refreshGitStatus();
+                        }
+                    } catch (e) { showToast('Init failed', 'error'); }
+                };
+                return;
+            }
+
+            list.innerHTML = '';
+            if (!data.files || data.files.length === 0) {
+                list.innerHTML = '<div class="tree-item" style="justify-content: center; opacity: 0.5;">No changes detected</div>';
+            } else {
+                data.files.forEach(f => {
+                    const item = document.createElement('div');
+                    item.className = 'git-file-item';
+                    const statusClass = f.status === 'M' ? 'badge-m' : (f.status === 'A' ? 'badge-a' : 'badge-u');
+                    item.innerHTML = `<span class="git-status-badge ${statusClass}">${f.status}</span><span class="tree-file">${f.path}</span>`;
+                    item.onclick = async () => {
+                        await fetch('/api/git/stage', {
+                            method: 'POST',
+                            headers: {'Content-Type': 'application/json'},
+                            body: JSON.stringify({ path: f.path })
+                        });
+                        showToast(`Staged ${f.path}`, 'success');
+                        refreshGitStatus();
+                        refreshWorkspaceTree(); // Sync explorer tree
+                    };
+                    list.appendChild(item);
+                });
+            }
+            // Also sync the explorer tree badges
+            if (typeof refreshWorkspaceTree === 'function') refreshWorkspaceTree();
+        } catch (e) {
+            console.error('Git status failed', e);
+        }
+    }
+
+    document.getElementById('git-refresh-btn')?.addEventListener('click', refreshGitStatus);
+    
+    document.getElementById('git-commit-btn')?.addEventListener('click', async () => {
+        const msg = document.getElementById('git-commit-msg').value;
+        if (!msg) return showToast('Please enter a commit message', 'warning');
+        
+        try {
+            const r = await fetch('/api/git/commit', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ message: msg })
+            });
+            const data = await r.json();
+            if (data.success) {
+                showToast('Committed changes', 'success');
+                document.getElementById('git-commit-msg').value = '';
+                refreshGitStatus();
+            } else {
+                showToast(data.error || 'Commit failed', 'error');
+            }
+        } catch (e) {
+            showToast('Commit error', 'error');
+        }
+    });
+
+    // =====================================================
+    // IDE Settings Logic
+    // =====================================================
+    document.getElementById('setting-font-size')?.addEventListener('change', (e) => {
+        const size = parseInt(e.target.value);
+        if (window.editor) {
+            window.editor.updateOptions({ fontSize: size });
+            showToast(`Editor font size set to ${size}px`, 'info');
+        }
+    });
+
+    document.getElementById('setting-ai-model')?.addEventListener('change', (e) => {
+        showToast(`AI priority updated to: ${e.target.value}`, 'success');
+    });
+
+    // =====================================================
+    // Voice Command (Re-linked & Enhanced)
+    // =====================================================
+    const voiceBtn = document.getElementById('voice-command-btn');
+    let recognition;
+
+    if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
+        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+        recognition = new SpeechRecognition();
+        recognition.continuous = false;
+        recognition.interimResults = false;
+        recognition.lang = 'en-US';
+
+        recognition.onstart = () => {
+            voiceBtn.classList.add('recording');
+            showToast('Listening...', 'info');
+        };
+
+        recognition.onerror = (event) => {
+            voiceBtn.classList.remove('recording');
+            showToast('Speech recognition error: ' + event.error, 'error');
+        };
+
+        recognition.onend = () => {
+            voiceBtn.classList.remove('recording');
+        };
+
+        recognition.onresult = (event) => {
+            const transcript = event.results[0][0].transcript;
+            document.getElementById('user-input').value = transcript;
+            showToast('Dictated: ' + transcript, 'success');
+            // Auto-submit if it's a command
+            if (transcript.toLowerCase().includes('run') || transcript.toLowerCase().includes('save')) {
+                 chatForm.dispatchEvent(new Event('submit'));
+            }
+        };
+    }
+
+    voiceBtn?.addEventListener('click', () => {
+        if (!recognition) {
+            return showToast('Speech recognition not supported in this browser', 'error');
+        }
+        if (voiceBtn.classList.contains('recording')) {
+            recognition.stop();
+        } else {
+            recognition.start();
+        }
+    });
+
     // Close shortcuts modal
     document.getElementById('close-shortcuts-btn')?.addEventListener('click', () => {
         document.getElementById('shortcuts-overlay')?.classList.add('hidden');
     });
+    // Security helper
+    function escapeHtml(text) {
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+    }
 </script>
 
 <!-- Professional Status Bar -->

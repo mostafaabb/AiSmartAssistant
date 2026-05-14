@@ -1065,6 +1065,210 @@ def sync_editor():
             return jsonify({"success": True})
     return jsonify({"success": False}), 400
 
+
+def _validate_code_syntax(code: str, language: str) -> dict:
+    """Return a dict {valid: bool, details: ...} using same logic as /api/syntax-check."""
+    lang = (language or 'python').lower()
+    if not code or not code.strip():
+        return {"valid": True, "message": "Empty code"}
+
+    if lang in ['python', 'python3']:
+        try:
+            compile(code, '<string>', 'exec')
+            return {"valid": True, "message": "Valid Python syntax"}
+        except SyntaxError as e:
+            return {"valid": False, "error": str(e), "line": e.lineno, "offset": e.offset, "message": f"Syntax error at line {e.lineno}: {e.msg}"}
+
+    if lang == 'json':
+        try:
+            json.loads(code)
+            return {"valid": True, "message": "Valid JSON"}
+        except json.JSONDecodeError as e:
+            return {"valid": False, "error": str(e), "line": e.lineno, "message": f"Invalid JSON at line {e.lineno}: {e.msg}"}
+
+    # Basic bracket matching for other languages
+    brackets = {'(': ')', '[': ']', '{': '}'}
+    stack = []
+    errors = []
+    for i, char in enumerate(code):
+        if char in brackets:
+            stack.append((char, i))
+        elif char in brackets.values():
+            if not stack:
+                errors.append(f"Unexpected closing bracket '{char}' at position {i}")
+            else:
+                opening, _ = stack.pop()
+                if brackets[opening] != char:
+                    errors.append(f"Mismatched brackets at position {i}")
+
+    if stack:
+        for opening, pos in stack:
+            errors.append(f"Unclosed bracket '{opening}' at position {pos}")
+
+    if errors:
+        return {"valid": False, "errors": errors}
+    return {"valid": True, "message": f"Basic syntax checks passed for {lang}"}
+
+
+@main.route('/api/ai/fix', methods=['POST'])
+@login_required
+@limiter.limit("20 per minute")
+def ai_fix():
+    """AI-powered file fixer: returns suggestion and validation; can optionally apply/commit/push/deploy.
+
+    Request JSON: code, language, path, instruction, apply(bool), commit(bool), push(bool), deploy(bool), commit_message
+    """
+    payload = request.get_json(silent=True) or {}
+    code = payload.get('code', '')
+    language = (payload.get('language') or 'python').lower()
+    rel_path = (payload.get('path') or '').replace('\\', '/')
+    instruction = payload.get('instruction') or f"Fix bugs, syntax errors, and obvious issues in this {language} file. Return only the corrected file contents, without explanation."
+    do_apply = bool(payload.get('apply', False))
+
+    if not code or not code.strip():
+        return jsonify({"error": "No code provided"}), 400
+
+    # include last execution error in prompt if available
+    ctx, last_error = user_state.snapshot_for_chat()
+    if last_error:
+        instruction = f"The runtime reported this error:\n{last_error}\n\n{instruction}"
+
+    api_key = current_app.config.get('OPENROUTER_API_KEY')
+    if not api_key or api_key == 'your_openrouter_api_key_here':
+        return jsonify({"error": "OPENROUTER_API_KEY is not configured on the server."}), 500
+
+    url = "https://openrouter.ai/api/v1/chat/completions"
+    headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
+    system = (
+        "You are an expert programming assistant. You will be given a single source file and an instruction. "
+        "Produce the corrected file contents only. If you include code fences, the server will extract the inner content. Do not add commentary."
+    )
+    user_msg = f"Instruction: {instruction}\n\nFile ({language}):\n```{language}\n{code}\n```"
+    data = {"model": "qwen/qwen3-coder:free", "messages": [{"role": "system", "content": system}, {"role": "user", "content": user_msg}], "temperature": 0.0, "max_tokens": 4096}
+
+    try:
+        r = requests.post(url, headers=headers, json=data, timeout=60)
+        try:
+            res_json = r.json()
+        except Exception:
+            return jsonify({"error": "Invalid response from AI service", "raw": r.text}), 500
+
+        if r.status_code != 200 or 'choices' not in res_json or not res_json['choices']:
+            return jsonify({"error": "AI service error", "detail": res_json}), 502
+
+        content = res_json['choices'][0].get('message', {}).get('content', '')
+
+        # extract code from fences
+        suggested = content
+        if '```' in content:
+            parts = content.split('```')
+            for p in parts[1:]:
+                if p.strip():
+                    lines = p.splitlines()
+                    # drop language token if present
+                    if lines and lines[0].strip().isalpha():
+                        suggested = '\n'.join(lines[1:])
+                    else:
+                        suggested = p
+                    break
+
+        suggested = suggested.strip()
+
+        # Validate suggested code before applying
+        validation = _validate_code_syntax(suggested, language)
+
+        applied = False
+        written_path = None
+        if do_apply:
+            if not rel_path:
+                return jsonify({"error": "Path is required to apply changes"}), 400
+            if not validation.get('valid'):
+                return jsonify({"success": True, "suggested": suggested, "validation": validation, "applied": False}), 200
+
+            abs_path = safe_join(rel_path)
+            if not abs_path:
+                return jsonify({"error": "Invalid path (out of workspace)"}), 403
+            try:
+                os.makedirs(os.path.dirname(abs_path), exist_ok=True)
+                # backup original
+                if os.path.exists(abs_path):
+                    bak_dir = os.path.join(os.getcwd(), 'workspace', '.nexus_backups')
+                    os.makedirs(bak_dir, exist_ok=True)
+                    ts = int(time.time())
+                    shutil.copy2(abs_path, os.path.join(bak_dir, f"{ts}-{os.path.basename(rel_path)}"))
+                with open(abs_path, 'w', encoding='utf-8') as f:
+                    f.write(suggested)
+                applied = True
+                written_path = rel_path
+            except Exception as e:
+                return jsonify({"error": f"Failed to write file: {str(e)}"}), 500
+
+        # Optional VCS / deploy actions (commit/push/deploy)
+        commit_result = None
+        push_result = None
+        deploy_result = None
+        if applied:
+            do_commit = bool(payload.get('commit', False))
+            do_push = bool(payload.get('push', False))
+            do_deploy = bool(payload.get('deploy', False))
+            commit_msg = payload.get('commit_message') or f"AI fix: {rel_path}"
+
+            git_root = os.path.exists(os.path.join(os.getcwd(), '.git'))
+            if (do_commit or do_push) and not git_root:
+                return jsonify({"error": "Workspace is not a git repository; cannot commit/push."}), 400
+
+            if do_commit:
+                try:
+                    subprocess.run(["git", "add", rel_path], check=True, capture_output=True, text=True)
+                    cproc = subprocess.run(["git", "commit", "-m", commit_msg], check=True, capture_output=True, text=True)
+                    commit_result = cproc.stdout.strip() or cproc.stderr.strip()
+                except subprocess.CalledProcessError as e:
+                    commit_result = (e.stdout or '') + (e.stderr or '')
+
+            if do_push:
+                branch = current_app.config.get('GIT_BRANCH', 'main')
+                remote = current_app.config.get('GIT_REMOTE', 'origin')
+                try:
+                    pproc = subprocess.run(["git", "push", remote, branch], check=True, capture_output=True, text=True, timeout=120)
+                    push_result = pproc.stdout.strip() or pproc.stderr.strip()
+                except subprocess.CalledProcessError as e:
+                    push_result = (e.stdout or '') + (e.stderr or '')
+                except Exception as e:
+                    push_result = str(e)
+
+            if do_deploy:
+                hook = current_app.config.get('DEPLOY_HOOK_URL')
+                cmd = current_app.config.get('DEPLOY_COMMAND')
+                try:
+                    if hook:
+                        try:
+                            dr = requests.post(hook, json={'path': rel_path, 'commit_message': commit_msg, 'pushed': bool(push_result)}, timeout=30)
+                            deploy_result = f"hook:{dr.status_code}"
+                        except Exception as e:
+                            deploy_result = f"hook_error:{str(e)}"
+                    elif cmd:
+                        if isinstance(cmd, (list, tuple)):
+                            dproc = subprocess.run(cmd, check=True, capture_output=True, text=True, timeout=300)
+                            deploy_result = dproc.stdout.strip() or dproc.stderr.strip()
+                        else:
+                            dproc = subprocess.run(cmd, shell=True, check=True, capture_output=True, text=True, timeout=300)
+                            deploy_result = dproc.stdout.strip() or dproc.stderr.strip()
+                    else:
+                        deploy_result = 'no_deploy_configured'
+                except subprocess.CalledProcessError as e:
+                    deploy_result = (e.stdout or '') + (e.stderr or '')
+                except Exception as e:
+                    deploy_result = str(e)
+
+        # record assistant response in history for traceability
+        user_state.append_history_assistant(content)
+
+        return jsonify({"success": True, "suggested": suggested, "validation": validation, "applied": applied, "path": written_path, "commit_result": commit_result, "push_result": push_result, "deploy_result": deploy_result})
+    except requests.Timeout:
+        return jsonify({"error": "AI request timed out"}), 504
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
 @main.route('/run-code', methods=['POST'])
 @limiter.limit("30 per minute")
 def run_code():

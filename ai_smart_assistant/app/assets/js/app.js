@@ -1087,15 +1087,24 @@ const AIFixManager = {
                     <button class="close-modal">×</button>
                 </div>
                 <div class="modal-body">
-                    <label>Target path (workspace): <input id="ai-fix-path" type="text" style="width:70%" /></label>
+                    <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;">
+                        <label>Target path (workspace): <input id="ai-fix-path" type="text" style="width:60%" /></label>
+                        <div id="ai-fix-status" style="font-weight:600;color:var(--muted);">Agent: idle</div>
+                    </div>
                     <div style="margin-top:8px; display:flex; gap:8px;">
                         <div style="flex:1"><label>Original</label><textarea id="ai-fix-original" class="ai-fix-text" readonly></textarea></div>
                         <div style="flex:1"><label>Suggested</label><textarea id="ai-fix-suggested" class="ai-fix-text"></textarea></div>
                     </div>
+                    <div style="margin-top:8px; display:flex; gap:8px; align-items:center;">
+                        <label><input id="ai-fix-commit" type="checkbox" /> Commit</label>
+                        <label><input id="ai-fix-push" type="checkbox" /> Push</label>
+                        <label><input id="ai-fix-deploy" type="checkbox" /> Deploy</label>
+                        <input id="ai-fix-commit-message" type="text" placeholder="Commit message (optional)" style="flex:1" />
+                    </div>
                 </div>
                 <div class="modal-footer">
                     <button id="ai-fix-apply-editor" class="btn">Apply to Editor</button>
-                    <button id="ai-fix-write-disk" class="btn primary">Write to Disk</button>
+                    <button id="ai-fix-apply-actions" class="btn primary">Apply + Actions</button>
                     <button id="ai-fix-close" class="btn">Close</button>
                 </div>
             </div>
@@ -1104,9 +1113,9 @@ const AIFixManager = {
         document.body.appendChild(overlay);
 
         overlay.querySelector('.close-modal')?.addEventListener('click', () => AIFixManager.hide());
-        document.getElementById('ai-fix-close')?.addEventListener('click', () => AIFixManager.hide());
-        document.getElementById('ai-fix-apply-editor')?.addEventListener('click', () => AIFixManager.applyToEditor());
-        document.getElementById('ai-fix-write-disk')?.addEventListener('click', () => AIFixManager.writeToDisk());
+        overlay.querySelector('#ai-fix-close')?.addEventListener('click', () => AIFixManager.hide());
+        overlay.querySelector('#ai-fix-apply-editor')?.addEventListener('click', () => AIFixManager.applyToEditor());
+        overlay.querySelector('#ai-fix-apply-actions')?.addEventListener('click', () => AIFixManager.applyWithActions());
     },
 
     openFixForCurrentFile: async function() {
@@ -1118,7 +1127,8 @@ const AIFixManager = {
         this.path = NexusAI.state.currentFile || '';
         if (pathInput) pathInput.value = this.path;
         document.getElementById('ai-fix-original').value = this.original;
-        document.getElementById('ai-fix-suggested').value = 'Requesting AI suggestion...';
+        document.getElementById('ai-fix-suggested').value = 'Agent: reading and preparing suggestion...';
+        document.getElementById('ai-fix-status').textContent = 'Agent: requesting suggestion';
         document.getElementById(this.modalId).classList.remove('hidden');
 
         try {
@@ -1126,10 +1136,12 @@ const AIFixManager = {
             if (res && res.success) {
                 this.suggested = res.suggested || '';
                 document.getElementById('ai-fix-suggested').value = this.suggested;
+                document.getElementById('ai-fix-status').textContent = 'Agent: suggestion ready';
                 Toast.success('AI suggestion ready');
             } else {
                 const err = (res && (res.error || res.detail)) || 'Unknown AI error';
                 document.getElementById('ai-fix-suggested').value = '';
+                document.getElementById('ai-fix-status').textContent = 'Agent: error';
                 Toast.error(`AI fix failed: ${err}`);
             }
         } catch (e) {
@@ -1150,6 +1162,50 @@ const AIFixManager = {
         EditorManager.setValue(suggested);
         Toast.success('Applied suggestion to editor');
         this.hide();
+    },
+
+    applyWithActions: async function() {
+        const suggested = document.getElementById('ai-fix-suggested')?.value || '';
+        const path = document.getElementById('ai-fix-path')?.value || '';
+        const doCommit = !!document.getElementById('ai-fix-commit')?.checked;
+        const doPush = !!document.getElementById('ai-fix-push')?.checked;
+        const doDeploy = !!document.getElementById('ai-fix-deploy')?.checked;
+        const commitMessage = document.getElementById('ai-fix-commit-message')?.value || '';
+
+        if (!suggested) { Toast.warning('No suggestion to apply'); return; }
+        if (!path) { Toast.warning('Please set a workspace path to write to'); return; }
+
+        try {
+            document.getElementById('ai-fix-status').textContent = 'Agent: applying suggestion...';
+            const res = await API.aiFix(suggested, document.getElementById('language-select')?.value || 'python', '', path, true, doCommit, doPush, doDeploy, commitMessage);
+
+            if (res && res.success) {
+                // show validation feedback if present
+                if (res.validation && !res.validation.valid) {
+                    document.getElementById('ai-fix-status').textContent = 'Agent: suggestion failed validation';
+                    const details = res.validation.error || (res.validation.errors && res.validation.errors.join('; ')) || res.validation.message || JSON.stringify(res.validation);
+                    Toast.error(`Suggestion validation failed: ${details}`);
+                    // keep modal open so user can edit suggestion
+                    return;
+                }
+
+                const msgs = [];
+                if (res.applied) msgs.push('written');
+                if (res.commit_result) msgs.push('committed');
+                if (res.push_result) msgs.push('pushed');
+                if (res.deploy_result) msgs.push('deployed');
+                document.getElementById('ai-fix-status').textContent = 'Agent: completed actions';
+                Toast.success(`Agent completed: ${msgs.join(', ') || 'done'}`);
+                this.hide();
+            } else {
+                document.getElementById('ai-fix-status').textContent = 'Agent: error';
+                Toast.error(`Agent action failed: ${res && (res.error || 'unknown')}`);
+            }
+        } catch (e) {
+            document.getElementById('ai-fix-status').textContent = 'Agent: error';
+            Toast.error('Agent request failed');
+            console.error(e);
+        }
     },
 
     writeToDisk: async function() {
